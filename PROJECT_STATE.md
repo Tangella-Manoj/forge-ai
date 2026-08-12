@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1, Clock + Domain Events complete; Validation blocked pending an architecture decision (see below).
+**Last updated:** Sprint 1 (Platform Core) complete — all 8 items done, 64/64 tests passing.
 
 ---
 
@@ -10,7 +10,7 @@
 
 Sprint 0 (Foundation): ✅ Done.
 
-Sprint 1 (Platform Core) — in progress:
+Sprint 1 (Platform Core): ✅ Done.
 
 | # | Item | Status |
 |---|---|---|
@@ -21,7 +21,7 @@ Sprint 1 (Platform Core) — in progress:
 | 5 | Value Objects | ✅ Resolved by engineering decision — no new artifact required (see below); no code produced |
 | 6 | Domain Events | ✅ Implemented, tested, merged |
 | 7 | Validation | ✅ Implemented, tested, merged (ADR-021) |
-| 8 | Core Tests (broader hardening pass) | Not started |
+| 8 | Core Tests (broader hardening pass) | ✅ Closed the one real gap found: `InternalUuidGenerator` had zero direct tests despite gatekeeping every typed ID's validity — added boundary tests (version-vs-variant isolated) and a concurrency test (10k virtual-thread-concurrent generations, zero collisions) |
 
 ## What Exists Right Now
 
@@ -45,13 +45,15 @@ src/main/java/io/forge/platform/
     │   └── EventId.java
     ├── result/
     │   └── Result.java              (sealed interface: Success/Failure)
-    └── time/
-        ├── Clock.java                (@FunctionalInterface)
-        ├── SystemClock.java          (package-private)
-        └── FixedClock.java           (package-private)
+    ├── time/
+    │   ├── Clock.java                (@FunctionalInterface)
+    │   ├── SystemClock.java          (package-private)
+    │   └── FixedClock.java           (package-private)
+    └── validation/
+        └── Validation.java          (final utility: requireNonNull/requireTrue/requireNonBlank)
 ```
 
-46/46 tests passing. `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo reporting).
+64/64 tests passing. `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95%+ instruction coverage on `core`).
 
 ## Engineering Decisions Recorded This Sprint
 
@@ -61,11 +63,12 @@ src/main/java/io/forge/platform/
 
 ## Current Blocker
 
-None. The kernel-spec gap (§1 subpackage list vs. §8 Validation Strategy) is resolved: `core.validation` added as an eighth kernel subpackage (ADR-021). Next action is the item-7 API proposal (package structure, public types, factory methods, justification — per the two-stage discipline in `CLAUDE.md` §29) — not yet started, and implementation should not begin until that proposal is reviewed and approved.
+None for Sprint 1 — it is complete. Sprint 2 (Platform Services) is next on the roadmap (`ARCHITECTURE_STATUS.md`), but unlike Sprint 1 (which had `12_PLATFORM_KERNEL_SPECIFICATION.md` written before any code), no specification exists yet for Platform Services beyond a one-paragraph capability list in `CLAUDE.md` §4 (validation, configuration, logging, serialization, observability, security foundations). Writing that specification is itself a significant architecture decision and should get the same two-stage rigor (spec/ADR first, implementation second) Sprint 1 had — not started without that groundwork.
 
-## Known, Tracked, Pre-Existing Issues (unrelated to this sprint's work, not touched)
+## Known, Tracked Issues
 
-- `src/main/java/ai/forge/ForgeAiApplication.java` — staged-then-deleted leftover from the pre-`io.forge.platform` package naming attempt. Still present in the git index.
-- No automated architecture-boundary test yet enforcing `core`/`platform` dependency rules.
-- README's "Key documents" list is stale relative to `docs/INDEX.md`.
+- No automated architecture-boundary test yet enforcing `core`/`platform` dependency rules (§13, §40).
+- `Result.java`, `FixedClock.java`, and `InternalUuidGenerator.java` still use inline `Objects.requireNonNull` instead of the new `Validation` helper — deliberately out of Validation's approved retrofit scope (`TypedId`/`PlatformError` only); candidate for a small future cleanup.
 - `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched deliberately as a legal-document caution).
+- Local development requires JDK 25; the default JDK on this machine was 21. Installed Temurin 25 to `~/jdks` (user-local, no sudo) to build — not yet documented in README/CONTRIBUTING as a prerequisite.
+- No GitHub remote configured yet — repository exists only locally pending manual repo creation.

@@ -4,7 +4,7 @@ Engineering Intelligence Platform — OpenEIOS
 
 Forge AI Platform is an open-source Engineering Intelligence Platform and the reference architecture for AI-native engineering systems. It helps teams make well-evidenced engineering decisions by combining repository analysis, observability, knowledge, and reasoning.
 
-Status: Sprint 0 — Platform bootstrap
+Status: Sprint 1 — Platform Core complete (Track A: `Result<T,E>`, Typed IDs, `PlatformError`, `Clock`, Value Objects, Domain Events, Validation, Core Tests)
 
 ## Architecture
 
@@ -31,8 +31,13 @@ Key documents:
 - docs/09_TECHNICAL_STRATEGY.md
 - docs/10_PLATFORM_CAPABILITY_MAP.md
 - docs/11_ENGINEERING_PRINCIPLES.md
+- docs/12_PLATFORM_KERNEL_SPECIFICATION.md
+- docs/13_CORE_CODING_GUIDELINES.md
+- docs/ARCHITECTURE_STATUS.md
 
 ## Getting Started
+
+**Prerequisite:** JDK 25 (matching `pom.xml` and CI). If your default JDK is older, install JDK 25 separately and point `JAVA_HOME` at it before building — the Maven wrapper does not install a JDK for you.
 
 1. Clone:
    `git clone git@github.com:your-org/forge-ai.git`
