@@ -1,7 +1,7 @@
 package io.forge.platform.core.error;
 
+import io.forge.platform.core.validation.Validation;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -74,16 +74,12 @@ public record InfrastructureError(
   }
 
   public InfrastructureError {
-    Objects.requireNonNull(code, "code must not be null");
-    if (code.isBlank()) {
-      throw new IllegalArgumentException("code must not be blank");
-    }
-    Objects.requireNonNull(message, "message must not be null");
-    if (message.isBlank()) {
-      throw new IllegalArgumentException("message must not be blank");
-    }
-    Objects.requireNonNull(details, "details must not be null");
-    Objects.requireNonNull(cause, "cause must not be null");
+    Validation.requireNonNull(code, "code must not be null");
+    Validation.requireNonBlank(code, "code must not be blank");
+    Validation.requireNonNull(message, "message must not be null");
+    Validation.requireNonBlank(message, "message must not be blank");
+    Validation.requireNonNull(details, "details must not be null");
+    Validation.requireNonNull(cause, "cause must not be null");
     details = Map.copyOf(details);
   }
 }

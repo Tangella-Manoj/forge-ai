@@ -1,6 +1,6 @@
 package io.forge.platform.core.id;
 
-import java.util.Objects;
+import io.forge.platform.core.validation.Validation;
 import java.util.UUID;
 
 /**
@@ -29,9 +29,8 @@ public record DecisionId(UUID value) implements TypedId {
   }
 
   public DecisionId {
-    Objects.requireNonNull(value, "value must not be null");
-    if (!InternalUuidGenerator.isVersion7(value)) {
-      throw new IllegalArgumentException("DecisionId must wrap a UUIDv7");
-    }
+    Validation.requireNonNull(value, "value must not be null");
+    Validation.requireTrue(
+        InternalUuidGenerator.isVersion7(value), "DecisionId must wrap a UUIDv7");
   }
 }
