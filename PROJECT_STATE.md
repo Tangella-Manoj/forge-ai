@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete — all 8 items done, 64/64 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) specification drafted (`docs/14_PLATFORM_SERVICES_SPECIFICATION.md`, ADR-022) — proposal stage, not yet approved for implementation. No Sprint 2 code written.
 
 ---
 
@@ -63,7 +63,7 @@ src/main/java/io/forge/platform/
 
 ## Current Blocker
 
-None for Sprint 1 — it is complete. Sprint 2 (Platform Services) is next on the roadmap (`ARCHITECTURE_STATUS.md`), but unlike Sprint 1 (which had `12_PLATFORM_KERNEL_SPECIFICATION.md` written before any code), no specification exists yet for Platform Services beyond a one-paragraph capability list in `CLAUDE.md` §4 (validation, configuration, logging, serialization, observability, security foundations). Writing that specification is itself a significant architecture decision and should get the same two-stage rigor (spec/ADR first, implementation second) Sprint 1 had — not started without that groundwork.
+Sprint 2 implementation is blocked on review of `docs/14_PLATFORM_SERVICES_SPECIFICATION.md` (drafted this session, ADR-022) — specifically the package structure (`io.forge.platform.{logging,config,validation,serialization,observability,security}`) and the recommended sequencing (Logging → Configuration → Observability → Security Foundations → Validation/Serialization, the last two deliberately deferred until a web layer exists to validate/serialize for). Each of the six capabilities still needs its own short API proposal before its implementation, same two-stage discipline as every Sprint 1 kernel primitive. Security Foundations (§3.6 of the spec) is flagged for extra review given its risk profile, even after the overall spec is approved.
 
 ## Known, Tracked Issues
 

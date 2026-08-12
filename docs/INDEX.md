@@ -3,7 +3,7 @@
 Start here. This index organizes the project's foundational documents and tells contributors when to read each.
 
 Getting started (read first)
-- README.md — project overview and Sprint 0 status
+- README.md — project overview and current sprint status
 - docs/01_PROJECT_VISION.md — high-level vision
 - docs/02_PRODUCT_REQUIREMENTS.md — PRD
 - docs/05_REPOSITORY_BLUEPRINT.md — where files live
@@ -15,6 +15,7 @@ Architecture & design (read during design reviews)
 - docs/10_PLATFORM_CAPABILITY_MAP.md — capability map
 - docs/07_ARCHITECTURE_DECISIONS.md — ADRs
 - docs/12_PLATFORM_KERNEL_SPECIFICATION.md — kernel design
+- docs/14_PLATFORM_SERVICES_SPECIFICATION.md — Platform Services design (draft, proposal stage)
 
 Standards & policies (read before implementing code)
 - docs/06_ENGINEERING_STANDARDS.md — coding/test/security standards

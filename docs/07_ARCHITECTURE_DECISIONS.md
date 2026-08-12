@@ -466,6 +466,34 @@ One more top-level kernel package to maintain. Accepted — it is a small, focus
 
 Kernel spec §1's subpackage list and §8's Validation Strategy section now agree. Track A (Platform Core) Sprint 1 item 7 (Validation) is unblocked.
 
+## ADR-022
+
+### Platform Services Package Structure
+
+#### Decision
+
+Platform Services (Sprint 2) live under `io.forge.platform.*` as siblings of `core` — `logging`, `config`, `validation`, `serialization`, `observability`, `security` — not nested inside `core`, and not as a `platform.platform.*` intermediate layer. Full rationale, scope, and sequencing: `docs/14_PLATFORM_SERVICES_SPECIFICATION.md`.
+
+This ADR also resolves an inconsistency in `ARCHITECTURE_STATUS.md`: its Platform capability list includes "Validation," which could be misread as duplicating `core.validation` (ADR-021). They are different concerns at different layers — kernel-level invariant checks (`core.validation`, done) versus boundary/DTO validation (`platform.validation`, not started) — matching the split kernel spec §8 already drew. Neither document needed correcting; the ambiguity only existed until it was written down explicitly.
+
+#### Why
+
+Sprint 1 had a full specification (`docs/12_...md`) before any kernel code existed. Sprint 2 had only a six-item name list. Implementing against a name list risks each capability landing in an inconsistent location or duplicating another capability's concern (the Validation ambiguity above is exactly that risk, caught before it became real code).
+
+#### Alternatives considered
+
+- Nest Platform under `core` — rejected: inverts the dependency rule that `core` depends on nothing (§8).
+- One flat `platform` package for all six capabilities — rejected: recreates the "dumping ground" anti-pattern §5 already warns against.
+- Multi-module Maven split now — rejected as premature; `05_REPOSITORY_BLUEPRINT.md` already documents this as a future structure the repository hasn't grown into yet.
+
+#### Trade-offs
+
+Six named-but-empty packages exist before any of them has code. Accepted — matches how Core's kernel spec pre-declared its subpackages before implementation.
+
+#### Long-term impact
+
+Sprint 2 can proceed capability-by-capability (each still needing its own short API proposal, per the two-stage discipline) without re-litigating package placement per item.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
