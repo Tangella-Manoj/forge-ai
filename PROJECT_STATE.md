@@ -20,7 +20,7 @@ Sprint 1 (Platform Core) — in progress:
 | 4 | Clock | ✅ Implemented, tested, merged |
 | 5 | Value Objects | ✅ Resolved by engineering decision — no new artifact required (see below); no code produced |
 | 6 | Domain Events | ✅ Implemented, tested, merged |
-| 7 | Validation | 🛑 **Blocked** — architectural documentation gap, awaiting your decision (see below) |
+| 7 | Validation | 🟡 Unblocked (ADR-021: `core.validation` package added to kernel spec) — API proposal not yet started |
 | 8 | Core Tests (broader hardening pass) | Not started — comes after Validation |
 
 ## What Exists Right Now
@@ -61,7 +61,7 @@ src/main/java/io/forge/platform/
 
 ## Current Blocker
 
-`docs/12_PLATFORM_KERNEL_SPECIFICATION.md` §1 lists seven subpackages (`id`, `result`, `error`, `event`, `time`, `valueobject`, `version`); §8 ("Validation Strategy") describes real, concrete guidance but has no corresponding package in that list — every other numbered section maps to exactly one listed package; Validation is the one exception. Proceeding requires either a kernel-spec documentation update (adding a `validation` package, most likely intended fix) or a decision to fold kernel-level validation helpers into an existing package (`valueobject`, per §8's own wording that kernel validation covers "IDs, value objects, and platform primitives"). Not resolved unilaterally — awaiting decision.
+None. The kernel-spec gap (§1 subpackage list vs. §8 Validation Strategy) is resolved: `core.validation` added as an eighth kernel subpackage (ADR-021). Next action is the item-7 API proposal (package structure, public types, factory methods, justification — per the two-stage discipline in `CLAUDE.md` §29) — not yet started, and implementation should not begin until that proposal is reviewed and approved.
 
 ## Known, Tracked, Pre-Existing Issues (unrelated to this sprint's work, not touched)
 

@@ -26,6 +26,7 @@ Subpackages:
 - `time`
 - `valueobject`
 - `version`
+- `validation`
 
 ### Why
 
@@ -258,7 +259,7 @@ Forge Platform will express many engineering concepts that deserve first-class t
 
 ## 8. Validation Strategy
 
-Use Jakarta Validation for boundary/input validation and kernel-level validation primitives for shared rules.
+Kernel-level validation primitives live in `core.validation` (ADR-021). Use Jakarta Validation for boundary/input validation and `core.validation` for shared kernel rules.
 
 Fail fast on invalid state.
 

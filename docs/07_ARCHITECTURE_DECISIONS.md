@@ -441,6 +441,31 @@ Does this make Forge AI better at helping engineering teams understand, build, o
 
 If the answer is no, reconsider whether it belongs in the project.
 
+## ADR-021
+
+### Kernel Validation Package
+
+#### Decision
+
+Add `core.validation` as an eighth kernel subpackage, alongside `id`, `result`, `error`, `event`, `time`, `valueobject`, `version` (kernel spec §1).
+
+#### Why
+
+Kernel spec §8 (Validation Strategy) already describes concrete, real guidance for kernel-level validation — shared invariant checks for IDs, value objects, and platform primitives — but no package was ever listed for it. Every other numbered section in the kernel spec maps to exactly one listed subpackage; Validation was the sole exception. This was a documentation gap, not a deliberate omission.
+
+#### Alternatives considered
+
+- Fold kernel validation helpers into `valueobject`, per §8's own wording ("IDs, value objects, and platform primitives"). Rejected: kernel validation applies across `id`, `error`, and future `valueobject` types, not only value objects — housing it inside `valueobject` would misrepresent its scope and create an awkward dependency shape (`id` and `error` reaching into `valueobject` for shared validation helpers).
+- Leave unresolved and continue ad hoc, per-type validation inside each compact constructor indefinitely. Rejected: this is what's already happening (§8 itself calls out that this is "ad hoc" today) and was the reason Sprint 1 flagged it as a blocker rather than silently continuing.
+
+#### Trade-offs
+
+One more top-level kernel package to maintain. Accepted — it is a small, focused package (shared validation helpers only, no framework dependency), consistent with the kernel's existing package-per-concern structure.
+
+#### Long-term impact
+
+Kernel spec §1's subpackage list and §8's Validation Strategy section now agree. Track A (Platform Core) Sprint 1 item 7 (Validation) is unblocked.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
