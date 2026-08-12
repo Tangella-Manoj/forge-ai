@@ -20,8 +20,8 @@ Sprint 1 (Platform Core) — in progress:
 | 4 | Clock | ✅ Implemented, tested, merged |
 | 5 | Value Objects | ✅ Resolved by engineering decision — no new artifact required (see below); no code produced |
 | 6 | Domain Events | ✅ Implemented, tested, merged |
-| 7 | Validation | 🟡 Unblocked (ADR-021: `core.validation` package added to kernel spec) — API proposal not yet started |
-| 8 | Core Tests (broader hardening pass) | Not started — comes after Validation |
+| 7 | Validation | ✅ Implemented, tested, merged (ADR-021) |
+| 8 | Core Tests (broader hardening pass) | Not started |
 
 ## What Exists Right Now
 
