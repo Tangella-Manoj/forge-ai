@@ -60,7 +60,7 @@ src/main/java/io/forge/platform/ai/
     └── AiCompletion.java
 ```
 
-76/76 tests passing. `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95% instruction / 100% branch coverage).
+79/79 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95% instruction / 100% branch coverage). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
 
 ## Engineering Decisions Recorded This Sprint
 
