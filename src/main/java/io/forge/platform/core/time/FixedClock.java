@@ -1,7 +1,7 @@
 package io.forge.platform.core.time;
 
+import io.forge.platform.core.validation.Validation;
 import java.time.Instant;
-import java.util.Objects;
 
 /**
  * Test {@link Clock} implementation that always returns the same instant.
@@ -13,7 +13,7 @@ final class FixedClock implements Clock {
   private final Instant instant;
 
   FixedClock(Instant instant) {
-    this.instant = Objects.requireNonNull(instant, "instant must not be null");
+    this.instant = Validation.requireNonNull(instant, "instant must not be null");
   }
 
   @Override

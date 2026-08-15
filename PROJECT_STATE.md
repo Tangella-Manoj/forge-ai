@@ -81,7 +81,6 @@ Platform Services (ADR-023) remains deferred, expected to pick up its first real
 
 ## Known, Tracked Issues
 
-- `Result.java`, `FixedClock.java`, and `InternalUuidGenerator.java` still use inline `Objects.requireNonNull` instead of the new `Validation` helper — deliberately out of Validation's approved retrofit scope (`TypedId`/`PlatformError` only); candidate for a small future cleanup.
 - The `platform.*` half of the dependency rule (`io.forge.platform.{logging,config,...}` may depend on `core`, never the reverse) has no ArchUnit rule yet — none of those packages have any classes, so a rule would be untestable/vacuous. Add it alongside the first Platform Services capability's first class.
 - `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched deliberately as a legal-document caution).
 - Local development requires JDK 25; the default JDK on this machine was 21. Installed Temurin 25 to `~/jdks` (user-local, no sudo) to build — not yet documented in README/CONTRIBUTING as a prerequisite.

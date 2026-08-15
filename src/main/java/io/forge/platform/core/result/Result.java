@@ -1,6 +1,6 @@
 package io.forge.platform.core.result;
 
-import java.util.Objects;
+import io.forge.platform.core.validation.Validation;
 import java.util.function.Function;
 
 /**
@@ -81,7 +81,7 @@ public sealed interface Result<T, E> permits Result.Success, Result.Failure {
    * @return a mapped result
    */
   default <U> Result<U, E> map(Function<? super T, ? extends U> mapper) {
-    Objects.requireNonNull(mapper, "mapper must not be null");
+    Validation.requireNonNull(mapper, "mapper must not be null");
     return fold(value -> Result.success(mapper.apply(value)), Result::failure);
   }
 
@@ -99,7 +99,7 @@ public sealed interface Result<T, E> permits Result.Success, Result.Failure {
    * @return a mapped result
    */
   default <F> Result<T, F> mapError(Function<? super E, ? extends F> mapper) {
-    Objects.requireNonNull(mapper, "mapper must not be null");
+    Validation.requireNonNull(mapper, "mapper must not be null");
     return fold(Result::success, error -> Result.failure(mapper.apply(error)));
   }
 
@@ -118,7 +118,7 @@ public sealed interface Result<T, E> permits Result.Success, Result.Failure {
    * @return a mapped result
    */
   default <U> Result<U, E> flatMap(Function<? super T, ? extends Result<U, E>> mapper) {
-    Objects.requireNonNull(mapper, "mapper must not be null");
+    Validation.requireNonNull(mapper, "mapper must not be null");
     return fold(mapper, Result::failure);
   }
 
@@ -148,14 +148,14 @@ public sealed interface Result<T, E> permits Result.Success, Result.Failure {
    */
   record Success<T, E>(T value) implements Result<T, E> {
     public Success {
-      Objects.requireNonNull(value, "value must not be null");
+      Validation.requireNonNull(value, "value must not be null");
     }
 
     @Override
     public <R> R fold(
         Function<? super T, ? extends R> onSuccess, Function<? super E, ? extends R> onFailure) {
-      Objects.requireNonNull(onSuccess, "onSuccess must not be null");
-      Objects.requireNonNull(onFailure, "onFailure must not be null");
+      Validation.requireNonNull(onSuccess, "onSuccess must not be null");
+      Validation.requireNonNull(onFailure, "onFailure must not be null");
       return onSuccess.apply(value);
     }
   }
@@ -169,14 +169,14 @@ public sealed interface Result<T, E> permits Result.Success, Result.Failure {
    */
   record Failure<T, E>(E error) implements Result<T, E> {
     public Failure {
-      Objects.requireNonNull(error, "error must not be null");
+      Validation.requireNonNull(error, "error must not be null");
     }
 
     @Override
     public <R> R fold(
         Function<? super T, ? extends R> onSuccess, Function<? super E, ? extends R> onFailure) {
-      Objects.requireNonNull(onSuccess, "onSuccess must not be null");
-      Objects.requireNonNull(onFailure, "onFailure must not be null");
+      Validation.requireNonNull(onSuccess, "onSuccess must not be null");
+      Validation.requireNonNull(onFailure, "onFailure must not be null");
       return onFailure.apply(error);
     }
   }

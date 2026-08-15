@@ -1,7 +1,7 @@
 package io.forge.platform.core.id;
 
+import io.forge.platform.core.validation.Validation;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -27,7 +27,7 @@ final class InternalUuidGenerator {
   }
 
   static boolean isVersion7(UUID value) {
-    Objects.requireNonNull(value, "value must not be null");
+    Validation.requireNonNull(value, "value must not be null");
     return value.version() == 7 && value.variant() == 2;
   }
 }
