@@ -494,6 +494,32 @@ Six named-but-empty packages exist before any of them has code. Accepted — mat
 
 Sprint 2 can proceed capability-by-capability (each still needing its own short API proposal, per the two-stage discipline) without re-litigating package placement per item.
 
+## ADR-023
+
+### Defer Sprint 2 Implementation Until a Concrete Caller Exists
+
+#### Decision
+
+Do not implement any of the six Platform Services capabilities yet, including Logging (which ADR-022 recommended starting first). Defer all of Sprint 2 until at least one concrete caller exists for it — either the first domain module (Identity, per the roadmap) or a deliberate decision to build a minimal web layer first.
+
+#### Why
+
+ADR-022 recommended Logging as the first capability, reasoning it had "zero dependency on a web layer existing." That reasoning was incomplete. Checked directly against the repository: zero log statements exist anywhere in `src/main/java`, zero `@RestController`s, zero custom `@Value`/`@ConfigurationProperties` usage. Spring Boot's default Logback output already provides timestamp/level/thread/logger with no configuration. There is no request-processing flow for a correlation ID (§3.1 of the Platform Services spec) to correlate. Writing logging configuration now would have no log statement to validate it against — the same "no concrete caller" problem ADR-022 already correctly identified for Validation and Serialization turns out to apply to all six capabilities, not just two, once checked against actual repository evidence instead of assumed.
+
+#### Alternatives considered
+
+- Implement Logging anyway, as scaffolding for whenever a caller arrives: rejected — this is precisely the "framework leakage" and "speculative infrastructure" this project's own standards (`13_CORE_CODING_GUIDELINES.md` §3, `CLAUDE.md` §9) reject, and there would be no way to test it meaningfully (no log output exists to assert against).
+- Build a minimal web layer now specifically to unblock Platform Services: rejected as a decision to make deliberately, not as a side effect of "Logging needs something to log about." Building a controller merely to justify already-planned infrastructure work is backwards — the controller should exist because a feature needs it.
+- Proceed to Sprint 3 (AI Runtime) instead, skipping Sprint 2 entirely: not rejected, but not decided here either — this is a genuine fork between two materially different directions, addressed as an open decision below rather than resolved unilaterally.
+
+#### Trade-offs
+
+Sprint 2 stays fully speculative (spec written, ADR-022 package structure still valid, zero code) for longer than originally planned. Accepted — the alternative (building unvalidatable infrastructure) is worse.
+
+#### Long-term impact
+
+`docs/14_PLATFORM_SERVICES_SPECIFICATION.md` §4 (Sequencing) is corrected by a dated revision note, not silently rewritten. The package structure and per-capability scope (§1–§3 of that document) remain valid and unaffected — only the "build now" sequencing claim was wrong.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

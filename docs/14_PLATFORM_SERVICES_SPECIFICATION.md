@@ -108,6 +108,8 @@ Each item below states *what problem it solves* and *what it explicitly excludes
 
 ## 4. Sequencing
 
+**Revision (2026-08-15, ADR-023):** the original recommendation below (Logging first) was written without checking the repository for an actual caller. Checked directly: zero log statements, zero controllers, zero custom configuration properties exist anywhere in `src/main/java`. All six capabilities, not just Validation and Serialization, are currently speculative if implemented today. The sequencing below is preserved for when each capability's caller exists — read it as "this order, once something needs it," not "start now."
+
 Recommended implementation order, evaluated against "does a real, current caller need this":
 
 1. **Logging** — every other capability and every future module benefits immediately; zero dependency on a web layer existing.

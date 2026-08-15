@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) specification drafted (`docs/14_PLATFORM_SERVICES_SPECIFICATION.md`, ADR-022) — proposal stage, not yet approved for implementation. No Sprint 2 code written.
+**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) specification exists (`docs/14_PLATFORM_SERVICES_SPECIFICATION.md`, ADR-022) but its "start with Logging" sequencing was found wrong on inspection and corrected (ADR-023): all six capabilities are currently speculative — zero log statements, zero controllers, zero custom config anywhere in the codebase to build any of them against. No Sprint 2 code written. Roadmap fork now open (see Current Blocker).
 
 ---
 
@@ -63,7 +63,12 @@ src/main/java/io/forge/platform/
 
 ## Current Blocker
 
-Sprint 2 implementation is blocked on review of `docs/14_PLATFORM_SERVICES_SPECIFICATION.md` (drafted this session, ADR-022) — specifically the package structure (`io.forge.platform.{logging,config,validation,serialization,observability,security}`) and the recommended sequencing (Logging → Configuration → Observability → Security Foundations → Validation/Serialization, the last two deliberately deferred until a web layer exists to validate/serialize for). Each of the six capabilities still needs its own short API proposal before its implementation, same two-stage discipline as every Sprint 1 kernel primitive. Security Foundations (§3.6 of the spec) is flagged for extra review given its risk profile, even after the overall spec is approved.
+A genuine roadmap fork, not an implementation detail — needs your decision (ADR-023):
+
+- **Option A:** Proceed to Sprint 3 (AI Runtime) or the first domain module (Identity, per `ARCHITECTURE_STATUS.md`'s sprint order) ahead of Platform Services, and build each Platform Services capability just-in-time when a real feature first needs it, not speculatively.
+- **Option B:** Deliberately build a minimal web layer now (a real decision, not a side effect) specifically to give Platform Services something concrete to attach to, then proceed with Sprint 2 as originally sequenced.
+
+Package structure (ADR-022, `io.forge.platform.{logging,config,validation,serialization,observability,security}`) and per-capability scope (spec §3) remain valid regardless of which option is chosen — only sequencing/timing is open.
 
 ## Known, Tracked Issues
 
