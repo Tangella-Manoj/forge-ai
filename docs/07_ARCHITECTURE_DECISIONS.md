@@ -520,6 +520,36 @@ Sprint 2 stays fully speculative (spec written, ADR-022 package structure still 
 
 `docs/14_PLATFORM_SERVICES_SPECIFICATION.md` §4 (Sequencing) is corrected by a dated revision note, not silently rewritten. The package structure and per-capability scope (§1–§3 of that document) remain valid and unaffected — only the "build now" sequencing claim was wrong.
 
+## ADR-024
+
+### AI Runtime Package Structure and `provider` as the First Buildable Piece
+
+#### Decision
+
+Proceed to Sprint 3 (AI Runtime) next, resolving the ADR-023 fork: not by building Platform Services speculatively, and not by building a throwaway web layer, but by moving to the layer the architecture already places next (`Core → Platform → AI Runtime`), which genuinely needs Configuration, Logging, Observability, and Security Foundations the moment it calls a real provider — giving Platform Services real callers as a consequence of real need, not as the goal.
+
+AI Runtime lives under `io.forge.platform.ai.*` (sibling of `core`, not nested under `core` or the Platform packages), with one subpackage per capability from the existing name list: `provider`, `router`, `prompt`, `context`, `tool`, `mcp`, `memory`, `evaluation`, `guardrail`. Full rationale: `docs/15_AI_RUNTIME_SPECIFICATION.md`.
+
+Of these nine, only `provider`'s **interface** is implemented now — `AiProvider` (vendor-agnostic `complete(AiPrompt) -> Result<AiCompletion, PlatformError>`), plus two deterministic test doubles (`AiProvider.fixed(...)`, `AiProvider.failing(...)`), mirroring exactly how `Clock` abstracts "get the time" without needing a real wall-clock library. No vendor SDK, no API key, no concrete provider implementation.
+
+#### Why
+
+Every capability past `provider` needs at least one real provider call to validate against, or a concrete product feature that doesn't exist yet (see spec §4's per-capability blocker table). Building them now would repeat the exact mistake ADR-023 just corrected for Platform Services. `provider`'s interface is the one exception: like `Clock`, it can be fully designed, implemented, and tested without any external dependency, because the abstraction itself — not any concrete backing implementation — is the deliverable.
+
+#### Alternatives considered
+
+- Implement all nine `ai.*` subpackages now: rejected — eight of them have no concrete caller (spec §4).
+- Wait until a provider/API key decision is made before writing any AI Runtime code at all: rejected — the interface genuinely needs no credential, and having it ready means the moment a provider is chosen, only a concrete `AiProvider` implementation is needed, not a redesign of the contract every future caller depends on.
+- Nest `ai` under `platform`: rejected — the architecture diagram (`CLAUDE.md` §4) places AI Runtime as its own layer, not inside Platform.
+
+#### Trade-offs
+
+`AiProvider`'s contract (`complete(AiPrompt) -> Result<AiCompletion, PlatformError>`) is now a public API surface with no real backing implementation yet — a bet that this is the right shape before any vendor is chosen. Mitigated: it is deliberately minimal (no streaming, no tool-calling parameters, no multi-modal input — all explicitly deferred to `tool`/`mcp`/future revision), so the surface a wrong guess could affect is small.
+
+#### Long-term impact
+
+Connecting a real provider becomes implementing one interface, not designing a contract under deadline pressure once a provider is already chosen. Blocked, explicitly, on a decision that is not mine to make: which provider(s) to integrate, and the API credentials to do so.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

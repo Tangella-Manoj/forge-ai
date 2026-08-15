@@ -16,6 +16,7 @@ Architecture & design (read during design reviews)
 - docs/07_ARCHITECTURE_DECISIONS.md — ADRs
 - docs/12_PLATFORM_KERNEL_SPECIFICATION.md — kernel design
 - docs/14_PLATFORM_SERVICES_SPECIFICATION.md — Platform Services design (draft, proposal stage)
+- docs/15_AI_RUNTIME_SPECIFICATION.md — AI Runtime design (draft, proposal stage)
 
 Standards & policies (read before implementing code)
 - docs/06_ENGINEERING_STANDARDS.md — coding/test/security standards

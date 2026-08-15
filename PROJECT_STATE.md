@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) specification exists (`docs/14_PLATFORM_SERVICES_SPECIFICATION.md`, ADR-022) but its "start with Logging" sequencing was found wrong on inspection and corrected (ADR-023): all six capabilities are currently speculative — zero log statements, zero controllers, zero custom config anywhere in the codebase to build any of them against. No Sprint 2 code written. Roadmap fork now open (see Current Blocker).
+**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) fork (ADR-023) resolved: proceeding to Sprint 3 (AI Runtime) instead, per architecture (`Core → Platform → AI Runtime`) — AI Runtime calling a real provider will give Platform Services its first genuine callers. `docs/15_AI_RUNTIME_SPECIFICATION.md` + ADR-024 drafted; `io.forge.platform.ai.provider` (the one piece buildable without a provider decision or API key) implemented: `AiProvider`, `AiPrompt`, `AiCompletion`. 76/76 tests passing.
 
 ---
 
@@ -51,9 +51,16 @@ src/main/java/io/forge/platform/
     │   └── FixedClock.java           (package-private)
     └── validation/
         └── Validation.java          (final utility: requireNonNull/requireTrue/requireNonBlank)
+
+src/main/java/io/forge/platform/ai/
+└── provider/
+    ├── AiProvider.java              (@FunctionalInterface: complete(AiPrompt) -> Result<AiCompletion, PlatformError>;
+    │                                  static fixed(...)/failing(...) test doubles — no vendor SDK, no API key)
+    ├── AiPrompt.java
+    └── AiCompletion.java
 ```
 
-64/64 tests passing. `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95%+ instruction coverage on `core`).
+76/76 tests passing. `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95% instruction / 100% branch coverage).
 
 ## Engineering Decisions Recorded This Sprint
 
@@ -63,12 +70,14 @@ src/main/java/io/forge/platform/
 
 ## Current Blocker
 
-A genuine roadmap fork, not an implementation detail — needs your decision (ADR-023):
+Connecting a real `AiProvider` implementation is blocked on two decisions that are not mine to make unilaterally (ADR-024):
 
-- **Option A:** Proceed to Sprint 3 (AI Runtime) or the first domain module (Identity, per `ARCHITECTURE_STATUS.md`'s sprint order) ahead of Platform Services, and build each Platform Services capability just-in-time when a real feature first needs it, not speculatively.
-- **Option B:** Deliberately build a minimal web layer now (a real decision, not a side effect) specifically to give Platform Services something concrete to attach to, then proceed with Sprint 2 as originally sequenced.
+1. **Which AI provider(s) to integrate** (Anthropic, OpenAI, both behind the abstraction, a local model) — cost, licensing, and product-direction implications.
+2. **API credentials** for that provider — a hard stop per this project's own rules; cannot be obtained or guessed.
 
-Package structure (ADR-022, `io.forge.platform.{logging,config,validation,serialization,observability,security}`) and per-capability scope (spec §3) remain valid regardless of which option is chosen — only sequencing/timing is open.
+Everything past `ai.provider`'s interface (`router`, `prompt`, `context`, `tool`, `mcp`, `memory`, `evaluation`, `guardrail`) is additionally blocked on having at least one real provider integration to validate against, or a concrete product feature that doesn't exist yet (`docs/15_..md` §4's per-capability table) — not sequenced for implementation until then.
+
+Platform Services (ADR-023) remains deferred, expected to pick up its first real capability (most likely Configuration, for provider API keys/model settings) once a provider is chosen.
 
 ## Known, Tracked Issues
 
