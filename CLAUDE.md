@@ -98,7 +98,7 @@ We optimize for readability, maintainability, simplicity, scalability, reliabili
 
 ## 8. Package Dependency Rules
 
-From `13_CORE_CODING_GUIDELINES.md` §10, currently enforced by code review (no automated architecture test exists yet — see §33/§40):
+From `13_CORE_CODING_GUIDELINES.md` §10, enforced by an automated ArchUnit test (`src/test/java/io/forge/platform/ArchitectureTest.java`) as of the AI Runtime milestone (Aug 2026), in addition to code review:
 
 - `core` depends on nothing outside the Java standard library, and framework/third-party annotations only if truly unavoidable.
 - `platform` may depend on `core`. Never the reverse.
@@ -146,7 +146,7 @@ Prefer: records, sealed classes/interfaces, pattern matching, virtual threads, s
 
 ## 13. Testing Standards
 
-Every feature requires unit tests; integration, contract, and architecture tests where applicable. Bug fixes require regression tests. Use Testcontainers for integration tests against external dependencies once such dependencies exist. Architecture tests (enforcing package dependency rules, §8) are called out as "especially important" (ADR-012) but do not yet exist in this repository — this is a known, tracked gap (see §40).
+Every feature requires unit tests; integration, contract, and architecture tests where applicable. Bug fixes require regression tests. Use Testcontainers for integration tests against external dependencies once such dependencies exist. Architecture tests (enforcing package dependency rules, §8) are called out as "especially important" (ADR-012) and now exist (`ArchitectureTest.java`, ArchUnit) — currently covering `core`'s dependency purity and the `core`/`ai` boundary; the `platform.*` half of the rule set will be added once Platform Services has its first class to check (see `PROJECT_STATE.md`).
 
 ## 14. Performance Guidelines
 
@@ -242,13 +242,13 @@ ADRs live in `docs/07_ARCHITECTURE_DECISIONS.md` today (numbered ADR-001 through
 
 Work is organized into three tracks, kept deliberately separate so they never compete for priority:
 
-- **Track A — Platform Core** (Sprint 1, the only track currently active): `Result<T,E>` ✅ · Typed IDs ✅ · `PlatformError` ✅ · `Clock` ✅ · Value Objects ✅ (resolved by decision, no artifact) · Domain Events ✅ · Validation 🛑 blocked (see `PROJECT_STATE.md`) · Core Tests (not started).
+- **Track A — Platform Core** (Sprint 1: complete): `Result<T,E>` ✅ · Typed IDs ✅ · `PlatformError` ✅ · `Clock` ✅ · Value Objects ✅ (resolved by decision, no artifact) · Domain Events ✅ · Validation ✅ (ADR-021) · Core Tests ✅. Sprint 2 (Platform Services) deferred (ADR-023) in favor of Sprint 3 (AI Runtime), currently active: `ai.provider` interface ✅ (ADR-024); everything past it blocked on a provider/credentials decision (see `PROJECT_STATE.md`).
 - **Track B — Engineering Infrastructure**: developer/AI tooling and process — this document, `AI_CONTEXT.md`-style continuity aids, ADR directory migration, CI improvements, release automation, doc-consistency cleanup. Backlog only; never displaces Track A work.
 - **Track C — AI Runtime**: future; not started; comes after Track A (Platform Core) and the subsequent Platform Services / Identity / Workspace sprints per `ARCHITECTURE_STATUS.md`'s sprint plan.
 
 **Two-stage discipline for every public API in Track A:** (1) API proposal — package structure, interfaces, public classes, factory methods, thread safety, testability, justification, alternatives considered, exclusions, future extensibility — reviewed and approved *before* (2) implementation. Do not implement before the API stage is explicitly approved.
 
-Full sprint sequence remains as documented in `ARCHITECTURE_STATUS.md`: Sprint 0 (Foundation, done) → Sprint 1 (Platform Core, in progress) → Platform Services → AI Runtime → Identity → Workspace → Repository Intelligence → Knowledge Engine → Reasoning Engine → Decision Engine → Automation Engine → Engineering Intelligence → Dashboard → v1.0.
+Full sprint sequence remains as documented in `ARCHITECTURE_STATUS.md`: Sprint 0 (Foundation, done) → Sprint 1 (Platform Core, done) → Platform Services (deferred, ADR-023) → AI Runtime (in progress) → Identity → Workspace → Repository Intelligence → Knowledge Engine → Reasoning Engine → Decision Engine → Automation Engine → Engineering Intelligence → Dashboard → v1.0.
 
 ## 30. AI Assistant Rules
 
@@ -318,10 +318,10 @@ Quick-reference summary — the rest of this document is the detail; this is the
 - Evidence before opinion. Architecture before implementation. Humans approve; AI never acts autonomously on production.
 - `core` depends on nothing but the JDK. Immutable by default. Typed everything (IDs, results, errors). No `now()` calls outside `Clock`.
 - Every public API is a long-term contract. Every architecture change needs an ADR. Every PR explains why, not just what.
-- One remaining known gap: no automated architecture-boundary test yet enforcing §8 (still an open Track B item — see below).
+- §8's `core`/`ai` boundary is now enforced by an automated architecture test, not just code review (see §13).
 
 ---
 
 **Housekeeping milestone (Aug 2026):** the Java-version inconsistency (§11), the project-identity inconsistency (§2, §29), and the non-functional Maven wrapper have all been resolved. The repository now consistently uses **Java 25** everywhere, **"Forge AI Platform"** as the product name and **"Forge Platform Core"** for the core-module-specific documents (kernel spec, core coding guidelines), and `./mvnw clean verify` builds successfully from a clean local Maven-wrapper cache. Package names (`io.forge.platform`) were intentionally left unchanged — no compelling technical reason existed to rename them, only the documentation-level naming was inconsistent.
 
-**Still-open Track B items** (documentation/process only, none block Track A): an automated architecture-boundary test for §8's package dependency rules; the `AI_CONTEXT.md`-style continuity aid originally proposed and superseded by this document; migrating ADRs from the single `07_ARCHITECTURE_DECISIONS.md` file to a `docs/ADR/` directory per `ARCHITECTURE_STATUS.md`'s stated future plan; README's "Key documents" list is stale relative to `docs/INDEX.md` (missing `12`, `13`, `ARCHITECTURE_STATUS.md`); the `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched as a legal-document caution, not an oversight).
+**Still-open Track B items** (documentation/process only, none block active work): the `AI_CONTEXT.md`-style continuity aid originally proposed and superseded by this document; migrating ADRs from the single `07_ARCHITECTURE_DECISIONS.md` file to a `docs/ADR/` directory per `ARCHITECTURE_STATUS.md`'s stated future plan; the `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched as a legal-document caution, not an oversight). Resolved since the housekeeping milestone above: the automated architecture-boundary test (§8, §13) and README's "Key documents" list (now current with `docs/INDEX.md`).
