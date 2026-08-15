@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) fork (ADR-023) resolved: proceeding to Sprint 3 (AI Runtime) instead, per architecture (`Core → Platform → AI Runtime`) — AI Runtime calling a real provider will give Platform Services its first genuine callers. `docs/15_AI_RUNTIME_SPECIFICATION.md` + ADR-024 drafted; `io.forge.platform.ai.provider` (the one piece buildable without a provider decision or API key) implemented: `AiProvider`, `AiPrompt`, `AiCompletion`. 76/76 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) fork (ADR-023) resolved: proceeding to Sprint 3 (AI Runtime) instead, per architecture (`Core → Platform → AI Runtime`) — AI Runtime calling a real provider will give Platform Services its first genuine callers. `docs/15_AI_RUNTIME_SPECIFICATION.md` + ADR-024 drafted; `io.forge.platform.ai.provider` (the one piece buildable without a provider decision or API key) implemented: `AiProvider`, `AiPrompt`, `AiCompletion`. Automated architecture-boundary test added (ArchUnit, test-scope only) — closes a gap tracked since Sprint 1. 79/79 tests passing.
 
 ---
 
@@ -81,8 +81,8 @@ Platform Services (ADR-023) remains deferred, expected to pick up its first real
 
 ## Known, Tracked Issues
 
-- No automated architecture-boundary test yet enforcing `core`/`platform` dependency rules (§13, §40).
 - `Result.java`, `FixedClock.java`, and `InternalUuidGenerator.java` still use inline `Objects.requireNonNull` instead of the new `Validation` helper — deliberately out of Validation's approved retrofit scope (`TypedId`/`PlatformError` only); candidate for a small future cleanup.
+- The `platform.*` half of the dependency rule (`io.forge.platform.{logging,config,...}` may depend on `core`, never the reverse) has no ArchUnit rule yet — none of those packages have any classes, so a rule would be untestable/vacuous. Add it alongside the first Platform Services capability's first class.
 - `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched deliberately as a legal-document caution).
 - Local development requires JDK 25; the default JDK on this machine was 21. Installed Temurin 25 to `~/jdks` (user-local, no sudo) to build — not yet documented in README/CONTRIBUTING as a prerequisite.
 - No GitHub remote configured yet — repository exists only locally pending manual repo creation.
