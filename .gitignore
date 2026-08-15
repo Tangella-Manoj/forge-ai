@@ -1,11 +1,6 @@
 # Java
 target/
 
-# Maven wrapper
-.mvn/
-mvnw
-mvnw.cmd
-
 # OS
 .DS_Store
 
