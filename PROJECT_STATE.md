@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). Critical clean-checkout defect found and fixed: Maven wrapper was gitignored. `intelligence.repository` (ADR-025) — deterministic repository structure scanning, no AI involved — now also extracts internal package-to-package import dependencies (`PackageDependency`), the foundation for future Change Intelligence/Risk Analysis work. Dogfooded against this repository's own source tree. 114/114 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). `intelligence.repository` (ADR-025) extracts repository structure + internal package dependencies. New: `intelligence.architecture` (ADR-026) — `CycleDetector` finds circular package dependencies via Tarjan's SCC algorithm, the first real consumer of `intelligence.repository`'s facts. Dogfooded: this repository's own package graph is verified acyclic. 130/130 tests passing.
 
 ---
 
@@ -69,9 +69,16 @@ src/main/java/io/forge/platform/intelligence/
     ├── PackageDependency.java       (fromPackage, toPackage — observed internal import facts only;
     │                                  external/JDK/framework imports excluded)
     └── BuildCoordinates.java        (groupId, artifactId, version)
+
+src/main/java/io/forge/platform/intelligence/
+└── architecture/
+    ├── CycleDetector.java           (final: findCycles(Set<PackageDependency>) -> Set<CyclicPackageGroup>;
+    │                                  Tarjan's SCC algorithm, depends on intelligence.repository
+    │                                  for PackageDependency — one-directional, ArchUnit-enforced)
+    └── CyclicPackageGroup.java      (packages — a finding, not merely an observed fact)
 ```
 
-114/114 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence` and `ai`/`intelligence` boundaries). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 96% instruction / 91% branch coverage on the full module, 89% on `RepositoryScanner` specifically — the remaining gaps are edge cases with no real product risk: an `ErrorHandler`'s empty no-op methods, and two import-resolution corners that can't meaningfully occur in a real `.java` file). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+130/130 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, and `repository`/`architecture` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 93% branch coverage — `intelligence.architecture` itself is 100%/100%; the remaining gaps are all pre-existing, documented edge cases in `RepositoryScanner` with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
 
 **Clean-checkout defect found and fixed:** `mvnw`/`mvnw.cmd`/`.mvn/` were gitignored — a fresh clone had no Maven wrapper at all (verified by actually cloning to a scratch directory, not assumed). This would have broken CI on the first push and every README-documented onboarding step. Fixed: wrapper now tracked, re-verified via a second fresh clone that `./mvnw clean verify` succeeds standalone. CI (`ci.yml`) also given Maven dependency caching (`cache: maven` on `actions/setup-java`).
 

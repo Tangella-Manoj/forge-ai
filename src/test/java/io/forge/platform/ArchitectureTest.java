@@ -56,6 +56,19 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.intelligence..");
 
   @ArchTest
+  static final ArchRule repositoryIntelligenceNeverDependsOnArchitectureIntelligence =
+      noClasses()
+          .that()
+          .resideInAPackage("io.forge.platform.intelligence.repository..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.intelligence.architecture..");
+
+  @ArchTest
   static final ArchRule topLevelPackagesAreFreeOfCycles =
       slices().matching("io.forge.platform.(*)..").should().beFreeOfCycles();
+
+  @ArchTest
+  static final ArchRule intelligenceSubpackagesAreFreeOfCycles =
+      slices().matching("io.forge.platform.intelligence.(*)..").should().beFreeOfCycles();
 }

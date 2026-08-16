@@ -581,6 +581,34 @@ Sequenced ahead of AI Runtime's remaining capabilities (`router`, `prompt`, `con
 
 Establishes the `intelligence.*` package as the home for all eight Engineering Intelligence sub-capabilities named in `CLAUDE.md` §4 (Repository, Architecture, Code, Performance, Security, Knowledge, Decision, Automation Intelligence) — each gets added the same way, one capability at a time, only when a concrete need justifies it. `RepositoryScanner`'s output is dogfooded against this repository itself in its own test suite — if the scanner and `pom.xml` ever disagree, the test fails immediately, not silently.
 
+## ADR-026
+
+### Architecture Intelligence: First Consumer of Repository Intelligence's Facts
+
+#### Decision
+
+Add `io.forge.platform.intelligence.architecture` — `CycleDetector.findCycles(Set<PackageDependency>) -> Set<CyclicPackageGroup>`, using Tarjan's strongly-connected-components algorithm over the internal-dependency facts `intelligence.repository` (ADR-025) already extracts.
+
+Establishes the dependency direction between Engineering Intelligence sub-capabilities: `architecture` may depend on `repository` (consumes `PackageDependency`); `repository` must never depend on `architecture` (fact-gathering stays independent of analysis built on it). Enforced by a new `ArchitectureTest` rule, not just stated.
+
+#### Why
+
+The prior session's report explicitly flagged that further growth of `intelligence.repository` needed "a second real consumer" to stay justified rather than speculatively accumulating more facts. Circular package dependencies are a genuine, well-understood architectural risk — directly serving the roadmap's Risk Analysis / Architecture Intelligence sub-capability — and the exact input this needs (`Set<PackageDependency>`) already exists from the prior session's work. No AI, no new dependency (plain Tarjan's algorithm, ~100 lines).
+
+#### Alternatives considered
+
+- Naive enumeration of every individual cycle path: rejected — a strongly-connected component of `n` mutually-reachable packages can contain exponentially many distinct paths through it; reporting the entangled group is the actionable fact, not an exhaustive path listing.
+- Depth-first "detect first cycle and stop": rejected — a real codebase can have multiple independent cyclic clusters; stopping at the first gives an incomplete, misleading picture.
+- Iterative (non-recursive) Tarjan implementation: rejected for now — recursion is fine for realistic repository package counts (tens to low hundreds); documented as a known scaling limit to revisit only if a real graph ever needs it, not built preemptively.
+
+#### Trade-offs
+
+Recursive implementation has a real (if distant) stack-depth ceiling on pathologically large graphs. Accepted and documented rather than solved speculatively.
+
+#### Long-term impact
+
+Dogfooded immediately: this repository's own package graph, scanned by its own tooling, is verified acyclic — the first real, non-trivial claim `intelligence.*` has produced about this codebase. Establishes the pattern for future Engineering Intelligence capabilities: `repository` gathers facts, other `intelligence.*` sub-capabilities analyze them, one-directional.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
