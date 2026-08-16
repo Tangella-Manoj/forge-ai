@@ -4,6 +4,7 @@ Start here. This index organizes the project's foundational documents and tells 
 
 Getting started (read first)
 - README.md — project overview and current sprint status
+- PROJECT_STATE.md — live current state: what's built, what's blocked, what's next (more current than any document below; read this before assuming a sprint/track status is still accurate)
 - docs/01_PROJECT_VISION.md — high-level vision
 - docs/02_PRODUCT_REQUIREMENTS.md — PRD
 - docs/05_REPOSITORY_BLUEPRINT.md — where files live
@@ -13,10 +14,10 @@ Architecture & design (read during design reviews)
 - docs/03_SYSTEM_ARCHITECTURE.md — system blueprint
 - docs/04_DOMAIN_MODEL.md — domain boundaries
 - docs/10_PLATFORM_CAPABILITY_MAP.md — capability map
-- docs/07_ARCHITECTURE_DECISIONS.md — ADRs
+- docs/07_ARCHITECTURE_DECISIONS.md — ADRs (includes `intelligence.repository`/`intelligence.architecture`, ADR-025/026 — no dedicated spec doc; each is small enough that its ADR carries the full design rationale)
 - docs/12_PLATFORM_KERNEL_SPECIFICATION.md — kernel design
 - docs/14_PLATFORM_SERVICES_SPECIFICATION.md — Platform Services design (draft, proposal stage)
-- docs/15_AI_RUNTIME_SPECIFICATION.md — AI Runtime design (draft, proposal stage)
+- docs/15_AI_RUNTIME_SPECIFICATION.md — AI Runtime design (`ai.provider` implemented per ADR-024; everything past its interface remains draft/blocked on a provider decision — see PROJECT_STATE.md)
 
 Standards & policies (read before implementing code)
 - docs/06_ENGINEERING_STANDARDS.md — coding/test/security standards

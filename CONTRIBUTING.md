@@ -16,8 +16,8 @@ How to contribute
 6. Request review; at least one approving review required for non-trivial changes.
 
 Local development
-- Start a reproducible dev environment using the devcontainer.
-- Use `./mvnw -DskipTests package` to build locally.
+- Prerequisite: JDK 25 (see README.md's Getting Started for details — no devcontainer exists; a plain local JDK 25 + the committed Maven wrapper is all that's needed).
+- Use `./mvnw clean verify` to build locally — matches CI exactly (compiles, runs the full test suite, checks formatting via spotless, generates coverage).
 
 Quality gates
 - All PRs must pass CI (build, tests, linters, security scans).

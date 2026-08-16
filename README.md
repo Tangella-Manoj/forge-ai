@@ -4,7 +4,7 @@ Engineering Intelligence Platform — OpenEIOS
 
 Forge AI Platform is an open-source Engineering Intelligence Platform and the reference architecture for AI-native engineering systems. It helps teams make well-evidenced engineering decisions by combining repository analysis, observability, knowledge, and reasoning.
 
-Status: Sprint 1 — Platform Core complete (Track A: `Result<T,E>`, Typed IDs, `PlatformError`, `Clock`, Value Objects, Domain Events, Validation, Core Tests)
+Status: Sprint 1 (Platform Core) complete. AI Runtime in progress — `ai.provider` interface implemented, provider-neutral, no concrete provider yet. Engineering Intelligence started ahead of schedule (evidence-based resequencing, see `CLAUDE.md` §29) — `intelligence.repository` and `intelligence.architecture` implemented. See `PROJECT_STATE.md` for the live, current picture.
 
 ## Architecture
 
@@ -33,7 +33,10 @@ Key documents:
 - docs/11_ENGINEERING_PRINCIPLES.md
 - docs/12_PLATFORM_KERNEL_SPECIFICATION.md
 - docs/13_CORE_CODING_GUIDELINES.md
+- docs/14_PLATFORM_SERVICES_SPECIFICATION.md
+- docs/15_AI_RUNTIME_SPECIFICATION.md
 - docs/ARCHITECTURE_STATUS.md
+- PROJECT_STATE.md — live current state, more current than any document above
 
 ## Getting Started
 
