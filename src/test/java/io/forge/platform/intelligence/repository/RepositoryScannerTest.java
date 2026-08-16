@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,6 +43,26 @@ class RepositoryScannerTest {
     assertEquals(1, resultPackage.get().classCount(), "Result.java is the only class there");
 
     assertTrue(snapshot.packages().size() >= 8, "expected at least the known core subpackages");
+
+    // Real, verified facts about this repository's actual internal imports (checked via
+    // grep before writing this assertion, not guessed).
+    assertTrue(
+        snapshot
+            .internalDependencies()
+            .contains(
+                new PackageDependency(
+                    "io.forge.platform.core.id", "io.forge.platform.core.validation")),
+        "core.id imports core.validation");
+    assertTrue(
+        snapshot
+            .internalDependencies()
+            .contains(
+                new PackageDependency("io.forge.platform.core.event", "io.forge.platform.core.id")),
+        "core.event imports core.id");
+    assertTrue(
+        snapshot.internalDependencies().stream()
+            .noneMatch(d -> d.fromPackage().equals("io.forge.platform.core.validation")),
+        "core.validation imports only java.util.Objects — zero internal dependencies");
   }
 
   @Test
@@ -123,6 +144,7 @@ class RepositoryScannerTest {
     assertTrue(result.isSuccess());
     RepositorySnapshot snapshot = result.fold(value -> value, error -> null);
     assertTrue(snapshot.packages().isEmpty());
+    assertTrue(snapshot.internalDependencies().isEmpty());
     assertFalse(snapshot.packages() instanceof java.util.ArrayList);
   }
 
@@ -193,6 +215,58 @@ class RepositoryScannerTest {
     assertTrue(result.isFailure());
     assertEquals(
         "repository.scan.java_version_missing", result.fold(v -> null, PlatformError::code));
+  }
+
+  @Test
+  void resolvesRegularWildcardAndStaticImportsAgainstKnownPackagesOnly(@TempDir Path dir)
+      throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>demo</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+
+    Path appDir = Files.createDirectories(dir.resolve("src/main/java/com/example/app"));
+    Path utilDir = Files.createDirectories(dir.resolve("src/main/java/com/example/util"));
+    Path modelDir = Files.createDirectories(dir.resolve("src/main/java/com/example/model"));
+
+    Files.writeString(
+        appDir.resolve("App.java"),
+        """
+        package com.example.app;
+
+        import com.example.util.Helper;
+        import com.example.model.*;
+        import static com.example.util.Constants.MAX;
+        import java.util.List;
+        import static java.util.Collections.emptyList;
+
+        class App {}
+        """);
+    Files.writeString(
+        utilDir.resolve("Helper.java"), "package com.example.util;\nclass Helper {}\n");
+    Files.writeString(modelDir.resolve("Item.java"), "package com.example.model;\nclass Item {}\n");
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(dir);
+
+    assertTrue(result.isSuccess());
+    RepositorySnapshot snapshot = result.fold(value -> value, error -> null);
+
+    assertEquals(
+        Set.of(
+            new PackageDependency("com.example.app", "com.example.util"),
+            new PackageDependency("com.example.app", "com.example.model")),
+        snapshot.internalDependencies(),
+        "regular, wildcard, and static-member imports resolve to their package; "
+            + "java.util imports (external) are excluded");
   }
 
   @Test

@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -80,9 +82,9 @@ public final class RepositoryScanner {
     }
 
     Path sourceRoot = moduleRoot.resolve("src").resolve("main").resolve("java");
-    List<PackageSummary> packages;
+    SourceScanResult sourceScan;
     try {
-      packages = scanPackages(sourceRoot);
+      sourceScan = scanSourceTree(sourceRoot);
     } catch (IOException e) {
       return Result.failure(
           InfrastructureError.of(
@@ -93,7 +95,10 @@ public final class RepositoryScanner {
 
     return Result.success(
         new RepositorySnapshot(
-            new BuildCoordinates(groupId, artifactId, version), javaVersion, packages));
+            new BuildCoordinates(groupId, artifactId, version),
+            javaVersion,
+            sourceScan.packages(),
+            sourceScan.internalDependencies()));
   }
 
   private static Element parsePomXml(Path pomPath)
@@ -150,27 +155,77 @@ public final class RepositoryScanner {
     return null;
   }
 
-  private static List<PackageSummary> scanPackages(Path sourceRoot) throws IOException {
+  /**
+   * Walks {@code sourceRoot} once, collecting both per-package class counts and raw {@code import}
+   * lines, then resolves those imports against the now-complete package set — an import can only be
+   * recognized as internal once every package in the module is known.
+   */
+  private static SourceScanResult scanSourceTree(Path sourceRoot) throws IOException {
     if (!Files.isDirectory(sourceRoot)) {
-      return List.of();
+      return new SourceScanResult(List.of(), Set.of());
     }
 
     Map<String, Integer> classCountByPackage = new LinkedHashMap<>();
+    List<ImportStatement> imports = new java.util.ArrayList<>();
+
     try (Stream<Path> files = Files.walk(sourceRoot)) {
-      files
-          .filter(Files::isRegularFile)
-          .filter(path -> path.toString().endsWith(".java"))
-          .forEach(
-              path -> {
-                Path relativeDir = sourceRoot.relativize(path.getParent());
-                String packageName =
-                    relativeDir.toString().replace(java.io.File.separatorChar, '.');
-                classCountByPackage.merge(packageName, 1, Integer::sum);
-              });
+      for (Path path :
+          files.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".java")).toList()) {
+        Path relativeDir = sourceRoot.relativize(path.getParent());
+        String packageName = relativeDir.toString().replace(java.io.File.separatorChar, '.');
+        classCountByPackage.merge(packageName, 1, Integer::sum);
+        imports.addAll(parseImports(path, packageName));
+      }
     }
 
-    return classCountByPackage.entrySet().stream()
-        .map(entry -> new PackageSummary(entry.getKey(), entry.getValue()))
-        .toList();
+    Set<String> knownPackages = classCountByPackage.keySet();
+    Set<PackageDependency> dependencies = new LinkedHashSet<>();
+    for (ImportStatement statement : imports) {
+      String candidate = withoutLastSegment(statement.importedFqcn());
+      if (!knownPackages.contains(candidate) && statement.isStatic()) {
+        candidate = withoutLastSegment(candidate);
+      }
+      if (knownPackages.contains(candidate) && !candidate.equals(statement.fromPackage())) {
+        dependencies.add(new PackageDependency(statement.fromPackage(), candidate));
+      }
+    }
+
+    List<PackageSummary> packages =
+        classCountByPackage.entrySet().stream()
+            .map(entry -> new PackageSummary(entry.getKey(), entry.getValue()))
+            .toList();
+
+    return new SourceScanResult(packages, dependencies);
   }
+
+  private static List<ImportStatement> parseImports(Path javaFile, String fromPackage)
+      throws IOException {
+    List<ImportStatement> imports = new java.util.ArrayList<>();
+    for (String line : Files.readAllLines(javaFile)) {
+      String trimmed = line.strip();
+      if (!trimmed.startsWith("import ")) {
+        continue;
+      }
+      String rest = trimmed.substring("import ".length()).strip();
+      boolean isStatic = rest.startsWith("static ");
+      if (isStatic) {
+        rest = rest.substring("static ".length()).strip();
+      }
+      if (rest.endsWith(";")) {
+        rest = rest.substring(0, rest.length() - 1);
+      }
+      imports.add(new ImportStatement(fromPackage, rest, isStatic));
+    }
+    return imports;
+  }
+
+  private static String withoutLastSegment(String fullyQualifiedName) {
+    int lastDot = fullyQualifiedName.lastIndexOf('.');
+    return lastDot < 0 ? "" : fullyQualifiedName.substring(0, lastDot);
+  }
+
+  private record ImportStatement(String fromPackage, String importedFqcn, boolean isStatic) {}
+
+  private record SourceScanResult(
+      List<PackageSummary> packages, Set<PackageDependency> internalDependencies) {}
 }
