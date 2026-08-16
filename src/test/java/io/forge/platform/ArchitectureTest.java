@@ -38,6 +38,24 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.ai..");
 
   @ArchTest
+  static final ArchRule coreNeverDependsOnIntelligence =
+      noClasses()
+          .that()
+          .resideInAPackage("io.forge.platform.core..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.intelligence..");
+
+  @ArchTest
+  static final ArchRule aiNeverDependsOnIntelligence =
+      noClasses()
+          .that()
+          .resideInAPackage("io.forge.platform.ai..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.intelligence..");
+
+  @ArchTest
   static final ArchRule topLevelPackagesAreFreeOfCycles =
       slices().matching("io.forge.platform.(*)..").should().beFreeOfCycles();
 }

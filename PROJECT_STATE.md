@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. Sprint 2 (Platform Services) fork (ADR-023) resolved: proceeding to Sprint 3 (AI Runtime) instead, per architecture (`Core → Platform → AI Runtime`) — AI Runtime calling a real provider will give Platform Services its first genuine callers. `docs/15_AI_RUNTIME_SPECIFICATION.md` + ADR-024 drafted; `io.forge.platform.ai.provider` (the one piece buildable without a provider decision or API key) implemented: `AiProvider`, `AiPrompt`, `AiCompletion`. Automated architecture-boundary test added (ArchUnit, test-scope only) — closes a gap tracked since Sprint 1. 79/79 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). Critical clean-checkout defect found and fixed: Maven wrapper was gitignored. First Engineering Intelligence capability shipped: `intelligence.repository` (ADR-025) — deterministic repository structure scanning, no AI involved, dogfooded against this repository's own `pom.xml`. 106/106 tests passing.
 
 ---
 
@@ -58,11 +58,21 @@ src/main/java/io/forge/platform/ai/
     │                                  static fixed(...)/failing(...) test doubles — no vendor SDK, no API key)
     ├── AiPrompt.java
     └── AiCompletion.java
+
+src/main/java/io/forge/platform/intelligence/
+└── repository/
+    ├── RepositoryScanner.java       (final: scan(Path) -> Result<RepositorySnapshot, PlatformError>;
+    │                                  reads pom.xml + walks src/main/java, no AI involved)
+    ├── RepositorySnapshot.java      (coordinates, javaVersion, packages)
+    ├── PackageSummary.java          (name, classCount)
+    └── BuildCoordinates.java        (groupId, artifactId, version)
 ```
 
-79/79 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 95% instruction / 100% branch coverage). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+106/106 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence` and `ai`/`intelligence` boundaries). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 96% instruction / 94% branch coverage — the two uncovered branches are an `ErrorHandler`'s empty no-op methods, deliberately left untested). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
 
 **Clean-checkout defect found and fixed:** `mvnw`/`mvnw.cmd`/`.mvn/` were gitignored — a fresh clone had no Maven wrapper at all (verified by actually cloning to a scratch directory, not assumed). This would have broken CI on the first push and every README-documented onboarding step. Fixed: wrapper now tracked, re-verified via a second fresh clone that `./mvnw clean verify` succeeds standalone. CI (`ci.yml`) also given Maven dependency caching (`cache: maven` on `actions/setup-java`).
+
+**`intelligence.repository` (ADR-025):** the first Engineering Intelligence capability. `RepositoryScanner` reads one Maven module's `pom.xml` and `src/main/java` tree into a deterministic `RepositorySnapshot` — build coordinates, Java version, per-package class counts. No AI, no inference, no external dependency beyond the JDK's built-in XML parser. Its own test suite dogfoods it against this repository (asserts the real `pom.xml`'s coordinates, Java 25, and `core.result`'s package/class count) — if the scanner and the repository it's scanning ever disagree, that test fails immediately.
 
 ## Engineering Decisions Recorded This Sprint
 
@@ -70,20 +80,15 @@ src/main/java/io/forge/platform/ai/
 - **`DomainEvent.aggregateId()` is `TypedId`, not generic.** A generic `DomainEvent<A extends TypedId>` would give concrete future events a strongly-typed aggregate reference without casting, but no concrete event exists yet to validate that design against, and generifying later is a source-breaking change once real implementers exist. Chose the simpler non-generic contract now; **flagging as a conscious, revisit-if-needed trade-off**, not an oversight.
 - **`DomainEvent.version()` is a primitive `long`**, not a dedicated typed value object. Kernel spec §5 only requires "Version" as metadata without further shape; introducing a new `EventVersion` type with no second consumer would be speculative. Revisit if event-sourcing/optimistic-concurrency needs grow.
 
-## Current Blocker
+## Current Blockers
 
-Connecting a real `AiProvider` implementation is blocked on two decisions that are not mine to make unilaterally (ADR-024):
+1. **GitHub push**: `gh` CLI is installed but not authenticated. `gh auth status` confirms no logged-in host. Requires an interactive `gh auth login` (browser or device code) — cannot be done non-interactively or fabricated. Everything else (18 clean commits, verified clean-checkout build, no secrets) is ready; this is the only remaining step.
+2. **AI provider implementation**: blocked on two decisions that are not mine to make unilaterally (ADR-024) — which provider(s) to integrate, and API credentials. `ai.provider`'s interface is deliberately provider-neutral so this blocker stays contained to one future implementation class.
 
-1. **Which AI provider(s) to integrate** (Anthropic, OpenAI, both behind the abstraction, a local model) — cost, licensing, and product-direction implications.
-2. **API credentials** for that provider — a hard stop per this project's own rules; cannot be obtained or guessed.
-
-Everything past `ai.provider`'s interface (`router`, `prompt`, `context`, `tool`, `mcp`, `memory`, `evaluation`, `guardrail`) is additionally blocked on having at least one real provider integration to validate against, or a concrete product feature that doesn't exist yet (`docs/15_..md` §4's per-capability table) — not sequenced for implementation until then.
-
-Platform Services (ADR-023) remains deferred, expected to pick up its first real capability (most likely Configuration, for provider API keys/model settings) once a provider is chosen.
+Everything past `ai.provider`'s interface (`router`, `prompt`, `context`, `tool`, `mcp`, `memory`, `evaluation`, `guardrail`) remains blocked on having at least one real provider integration to validate against (`docs/15_..md` §4). Platform Services (ADR-023) remains deferred, expected to activate once a provider is chosen. Neither blocker affects `intelligence.*` (ADR-025) — that layer needs no AI and no push to keep growing.
 
 ## Known, Tracked Issues
 
 - The `platform.*` half of the dependency rule (`io.forge.platform.{logging,config,...}` may depend on `core`, never the reverse) has no ArchUnit rule yet — none of those packages have any classes, so a rule would be untestable/vacuous. Add it alongside the first Platform Services capability's first class.
 - `LICENSE` copyright line still reads "Forge AI" rather than "Forge AI Platform" (left untouched deliberately as a legal-document caution).
 - Local development requires JDK 25; the default JDK on this machine was 21. Installed Temurin 25 to `~/jdks` (user-local, no sudo) to build — not yet documented in README/CONTRIBUTING as a prerequisite.
-- No GitHub remote configured yet — repository exists only locally pending manual repo creation.

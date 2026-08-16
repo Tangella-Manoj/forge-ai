@@ -550,6 +550,37 @@ Every capability past `provider` needs at least one real provider call to valida
 
 Connecting a real provider becomes implementing one interface, not designing a contract under deadline pressure once a provider is already chosen. Blocked, explicitly, on a decision that is not mine to make: which provider(s) to integrate, and the API credentials to do so.
 
+## ADR-025
+
+### Repository Intelligence: First Engineering Intelligence Capability, Deliberately Sequenced Ahead of AI Runtime's Remaining Capabilities
+
+#### Decision
+
+Implement the smallest useful slice of Repository Intelligence now — `io.forge.platform.intelligence.repository`: `RepositoryScanner.scan(Path) -> Result<RepositorySnapshot, PlatformError>`, reading one Maven module's `pom.xml` and `src/main/java` tree into a deterministic snapshot (build coordinates, Java version, per-package class counts). No AI, no inference — observed facts only.
+
+`intelligence` is a new top-level package, sibling of `core` and `ai`, representing the "Engineering Intelligence" layer (`CLAUDE.md` §4: `Core → Platform → AI Runtime → Engineering Intelligence → Products`). This is the first code in that layer.
+
+#### Why
+
+Both remaining blockers (GitHub authentication, AI provider/credentials) are genuinely external — neither is something further engineering work resolves. Repository Intelligence's foundational capability (understanding a repository's structure) is explicitly named in the product mission as where "core product differentiation should come from rather than generic chat," and — critically — it needs no AI provider at all: parsing a `pom.xml` and walking a directory tree is deterministic tooling, not a model call. This is genuinely unblocked, real product value, not manufactured busywork.
+
+Sequenced ahead of AI Runtime's remaining capabilities (`router`, `prompt`, `context`, etc. — still correctly blocked per ADR-024's per-capability table) because those need a real provider to validate against, which this doesn't need at all.
+
+#### Alternatives considered
+
+- Wait for the AI provider decision before doing anything further: rejected — leaves genuinely unblocked, valuable work undone for no reason.
+- Build a full symbol/dependency graph now: rejected — no concrete use case yet exercises anything beyond package-level facts; richer analysis is deferred until Change Intelligence or Risk Analysis has a real need for it (per the standing instruction not to introduce a large graph schema prematurely).
+- Use ArchUnit (already a dependency) as the analysis engine, since it already extracts package/class structure: rejected — it's a test-scope assertion library; repurposing it as a production analysis engine is a scope mismatch, and `pom.xml`/filesystem parsing needs no new dependency at all (JDK's built-in `javax.xml.parsers`).
+- Support multi-module recursion now: rejected — no second real module exists in this repository to validate that logic against; a caller wanting a multi-module view calls `scan` once per child module today.
+
+#### Trade-offs
+
+`RepositorySnapshot`'s shape (coordinates, Java version, per-package class counts) is a real public API bet made with only one concrete example (this repository) to validate against. Mitigated by keeping the surface minimal — no speculative fields — and by the type being trivially extensible (a record, not a sealed hierarchy) without breaking existing callers.
+
+#### Long-term impact
+
+Establishes the `intelligence.*` package as the home for all eight Engineering Intelligence sub-capabilities named in `CLAUDE.md` §4 (Repository, Architecture, Code, Performance, Security, Knowledge, Decision, Automation Intelligence) — each gets added the same way, one capability at a time, only when a concrete need justifies it. `RepositoryScanner`'s output is dogfooded against this repository itself in its own test suite — if the scanner and `pom.xml` ever disagree, the test fails immediately, not silently.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
