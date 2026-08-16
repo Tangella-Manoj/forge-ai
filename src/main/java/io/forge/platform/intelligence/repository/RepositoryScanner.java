@@ -7,6 +7,7 @@ import io.forge.platform.core.validation.Validation;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,11 +26,14 @@ import org.xml.sax.SAXParseException;
 
 /**
  * Builds a {@link RepositorySnapshot} by reading a single Maven module's {@code pom.xml} and
- * walking its {@code src/main/java} tree.
+ * walking its {@code src/main/java} tree — {@link #scan(Path)} — or scans every module of a
+ * multi-module project via its parent's {@code <modules>} declaration — {@link
+ * #scanWorkspace(Path)}.
  *
- * <p>Deliberately scoped to one module per call — a caller wanting a multi-module view calls this
- * once per child module and composes the results, rather than this class recursing through {@code
- * <modules>} declarations it cannot yet validate against a real multi-module fixture.
+ * <p>Handles the common real-world case of Maven coordinate/property inheritance (a child module
+ * declaring only its own {@code artifactId} and inheriting {@code groupId}/{@code version}/{@code
+ * java.version} from a local {@code <parent>}) — verified against a real multi-module project, not
+ * assumed correct from the Maven specification alone.
  *
  * <p>All failures (missing/unreadable {@code pom.xml}, malformed XML, missing required fields) are
  * expected, recoverable outcomes — returned as a {@link Result}, never thrown.
@@ -63,17 +67,22 @@ public final class RepositoryScanner {
               "repository.scan.pom_unparseable", "Could not parse " + pomPath, e));
     }
 
-    String groupId = childText(project, "groupId");
+    // groupId/version may be inherited from <parent> rather than declared directly — the norm for
+    // a properly-structured multi-module project (verified against a real one: DLMP's child
+    // modules declare only artifactId). artifactId is never inherited — it is each module's own
+    // identity by Maven convention.
+    String groupId = resolveInheritedCoordinate(project, "groupId");
     String artifactId = childText(project, "artifactId");
-    String version = childText(project, "version");
+    String version = resolveInheritedCoordinate(project, "version");
     if (groupId == null || artifactId == null || version == null) {
       return Result.failure(
           InfrastructureError.of(
               "repository.scan.coordinates_missing",
-              "pom.xml is missing a top-level groupId, artifactId, or version at " + pomPath));
+              "pom.xml (and its <parent>, if any) is missing a groupId, artifactId, or version at "
+                  + pomPath));
     }
 
-    Integer javaVersion = readJavaVersion(project);
+    Integer javaVersion = readJavaVersion(project, moduleRoot);
     if (javaVersion == null) {
       return Result.failure(
           InfrastructureError.of(
@@ -99,6 +108,69 @@ public final class RepositoryScanner {
             javaVersion,
             sourceScan.packages(),
             sourceScan.internalDependencies()));
+  }
+
+  /**
+   * Scans a multi-module project rooted at {@code rootDir}: the root (parent) module itself, plus
+   * every module its {@code pom.xml} declares under {@code <modules>}.
+   *
+   * <p>Fails fast: if the root or any declared child module fails to scan, the whole call fails,
+   * carrying that module's error — this deliberately does not invent a "partial success" model with
+   * no concrete caller needing one yet. Does not recurse into a module's own nested {@code
+   * <modules>} (multi-level aggregation) — no real project on hand needs that yet either.
+   *
+   * @param rootDir the multi-module project's root directory, containing the parent {@code pom.xml}
+   * @return one snapshot per module (root first, then each declared child in declaration order), or
+   *     a failure describing which module could not be scanned
+   */
+  public static Result<List<RepositorySnapshot>, PlatformError> scanWorkspace(Path rootDir) {
+    Validation.requireNonNull(rootDir, "rootDir must not be null");
+
+    Result<RepositorySnapshot, PlatformError> rootResult = scan(rootDir);
+    if (rootResult.isFailure()) {
+      return Result.failure(rootResult.fold(v -> null, error -> error));
+    }
+
+    Path rootPomPath = rootDir.resolve("pom.xml");
+    Element rootProject;
+    try {
+      rootProject = parsePomXml(rootPomPath);
+    } catch (ParserConfigurationException | SAXException | IOException e) {
+      // scan() above already parsed this file successfully; a failure here would mean it changed
+      // on disk between the two reads. Treat identically to any other unparseable pom.
+      return Result.failure(
+          InfrastructureError.of(
+              "repository.scan.pom_unparseable", "Could not parse " + rootPomPath, e));
+    }
+
+    List<RepositorySnapshot> snapshots = new ArrayList<>();
+    snapshots.add(rootResult.fold(value -> value, error -> null));
+
+    for (String moduleName : readModuleNames(rootProject)) {
+      Result<RepositorySnapshot, PlatformError> moduleResult = scan(rootDir.resolve(moduleName));
+      if (moduleResult.isFailure()) {
+        return Result.failure(moduleResult.fold(v -> null, error -> error));
+      }
+      snapshots.add(moduleResult.fold(value -> value, error -> null));
+    }
+
+    return Result.success(List.copyOf(snapshots));
+  }
+
+  private static List<String> readModuleNames(Element project) {
+    NodeList modulesNodes = project.getElementsByTagName("modules");
+    if (modulesNodes.getLength() == 0) {
+      return List.of();
+    }
+    Element modulesElement = (Element) modulesNodes.item(0);
+    NodeList children = modulesElement.getChildNodes();
+    List<String> names = new ArrayList<>();
+    for (int i = 0; i < children.getLength(); i++) {
+      if (children.item(i) instanceof Element element && element.getTagName().equals("module")) {
+        names.add(element.getTextContent().trim());
+      }
+    }
+    return names;
   }
 
   private static Element parsePomXml(Path pomPath)
@@ -136,7 +208,29 @@ public final class RepositoryScanner {
     return null;
   }
 
-  private static Integer readJavaVersion(Element project) {
+  private static Integer readJavaVersion(Element project, Path moduleRoot) {
+    Integer ownVersion = readJavaVersionFromOwnProperties(project);
+    if (ownVersion != null) {
+      return ownVersion;
+    }
+
+    // Not declared here — a properly-structured multi-module project typically declares it once,
+    // on the parent, and lets every child inherit it (verified: DLMP's child modules have no
+    // <properties> at all). Only follow a *local* parent (a relativePath pointing at a real file
+    // on disk); a remote parent (Maven Central coordinates, <relativePath/> left empty) has
+    // nothing on this filesystem to read.
+    Path parentPomPath = resolveLocalParentPomPath(project, moduleRoot);
+    if (parentPomPath == null || !Files.isRegularFile(parentPomPath)) {
+      return null;
+    }
+    try {
+      return readJavaVersionFromOwnProperties(parsePomXml(parentPomPath));
+    } catch (ParserConfigurationException | SAXException | IOException e) {
+      return null;
+    }
+  }
+
+  private static Integer readJavaVersionFromOwnProperties(Element project) {
     NodeList propertiesNodes = project.getElementsByTagName("properties");
     if (propertiesNodes.getLength() == 0) {
       return null;
@@ -156,6 +250,46 @@ public final class RepositoryScanner {
   }
 
   /**
+   * Resolves a coordinate ({@code groupId} or {@code version}) either from {@code project}
+   * directly, or — since Maven lets a module inherit either from its {@code <parent>} — from the
+   * {@code <parent>} element's own declared value. {@code artifactId} is never inherited and must
+   * not be passed here.
+   */
+  private static String resolveInheritedCoordinate(Element project, String tagName) {
+    String direct = childText(project, tagName);
+    if (direct != null) {
+      return direct;
+    }
+    NodeList parentNodes = project.getElementsByTagName("parent");
+    if (parentNodes.getLength() == 0) {
+      return null;
+    }
+    return childText((Element) parentNodes.item(0), tagName);
+  }
+
+  /**
+   * Resolves the local filesystem path to {@code project}'s parent pom, if it declares one and that
+   * parent is local (not purely a remote-repository coordinate).
+   */
+  private static Path resolveLocalParentPomPath(Element project, Path moduleRoot) {
+    NodeList parentNodes = project.getElementsByTagName("parent");
+    if (parentNodes.getLength() == 0) {
+      return null;
+    }
+    Element parentElement = (Element) parentNodes.item(0);
+    String relativePath = childText(parentElement, "relativePath");
+    if ("".equals(relativePath)) {
+      // An explicit, empty <relativePath/> means "no local parent" — Maven's own convention for
+      // a parent that lives only in a remote repository (e.g. spring-boot-starter-parent).
+      return null;
+    }
+
+    Path target =
+        moduleRoot.resolve(relativePath != null ? relativePath : "../pom.xml").normalize();
+    return Files.isDirectory(target) ? target.resolve("pom.xml") : target;
+  }
+
+  /**
    * Walks {@code sourceRoot} once, collecting both per-package class counts and raw {@code import}
    * lines, then resolves those imports against the now-complete package set — an import can only be
    * recognized as internal once every package in the module is known.
@@ -166,7 +300,7 @@ public final class RepositoryScanner {
     }
 
     Map<String, Integer> classCountByPackage = new LinkedHashMap<>();
-    List<ImportStatement> imports = new java.util.ArrayList<>();
+    List<ImportStatement> imports = new ArrayList<>();
 
     try (Stream<Path> files = Files.walk(sourceRoot)) {
       for (Path path :
@@ -200,7 +334,7 @@ public final class RepositoryScanner {
 
   private static List<ImportStatement> parseImports(Path javaFile, String fromPackage)
       throws IOException {
-    List<ImportStatement> imports = new java.util.ArrayList<>();
+    List<ImportStatement> imports = new ArrayList<>();
     for (String line : Files.readAllLines(javaFile)) {
       String trimmed = line.strip();
       if (!trimmed.startsWith("import ")) {

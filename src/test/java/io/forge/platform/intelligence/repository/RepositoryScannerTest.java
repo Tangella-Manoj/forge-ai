@@ -10,6 +10,7 @@ import io.forge.platform.core.result.Result;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -272,5 +273,231 @@ class RepositoryScannerTest {
   @Test
   void rejectsNullModuleRoot() {
     assertThrows(NullPointerException.class, () -> RepositoryScanner.scan(null));
+  }
+
+  // --- Maven parent inheritance: verified against a real multi-module project (DLMP) before
+  // these fixtures were written; a child module there declares only artifactId, inheriting
+  // groupId/version from <parent> and java.version from the parent's own <properties> via the
+  // default ../pom.xml relative path. These fixtures reproduce that exact shape synthetically so
+  // the test suite has no dependency on another repository's location or existence.
+
+  @Test
+  void inheritsGroupIdAndVersionFromLocalParent(@TempDir Path dir) throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>parent</artifactId>
+          <version>2.0.0</version>
+          <packaging>pom</packaging>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+    Path childDir = Files.createDirectories(dir.resolve("child"));
+    Files.writeString(
+        childDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>2.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(childDir);
+
+    assertTrue(result.isSuccess(), () -> "expected success, got: " + result);
+    RepositorySnapshot snapshot = result.fold(value -> value, error -> null);
+    assertEquals(new BuildCoordinates("com.example", "child", "2.0.0"), snapshot.coordinates());
+  }
+
+  @Test
+  void inheritsJavaVersionFromLocalParentsPropertiesViaDefaultRelativePath(@TempDir Path dir)
+      throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>parent</artifactId>
+          <version>1.0.0</version>
+          <packaging>pom</packaging>
+          <properties>
+            <java.version>21</java.version>
+          </properties>
+        </project>
+        """);
+    Path childDir = Files.createDirectories(dir.resolve("child"));
+    Files.writeString(
+        childDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(childDir);
+
+    assertTrue(result.isSuccess(), () -> "expected success, got: " + result);
+    assertEquals(21, result.fold(RepositorySnapshot::javaVersion, error -> -1));
+  }
+
+  @Test
+  void inheritsJavaVersionWhenRelativePathPointsAtADirectoryRatherThanAPomFile(@TempDir Path dir)
+      throws IOException {
+    Path parentDir = Files.createDirectories(dir.resolve("parent-module"));
+    Files.writeString(
+        parentDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>parent</artifactId>
+          <version>1.0.0</version>
+          <packaging>pom</packaging>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+    Path childDir = Files.createDirectories(dir.resolve("elsewhere/child"));
+    Files.writeString(
+        childDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+            <relativePath>../../parent-module</relativePath>
+          </parent>
+          <artifactId>child</artifactId>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(childDir);
+
+    assertTrue(result.isSuccess(), () -> "expected success, got: " + result);
+    assertEquals(21, result.fold(RepositorySnapshot::javaVersion, error -> -1));
+  }
+
+  @Test
+  void resolvesCoordinatesButNotJavaVersionFromARemoteParent(@TempDir Path dir) throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-parent</artifactId>
+            <version>4.1.0</version>
+            <relativePath/>
+          </parent>
+          <artifactId>demo</artifactId>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(dir);
+
+    // groupId/version are stated inline on <parent> itself — no file read needed, so they resolve
+    // even for a remote parent. java.version lives in the parent's *properties*, which requires
+    // reading the parent's pom.xml — impossible for a remote (Maven Central) parent with an
+    // explicitly empty <relativePath/>, so that specifically fails.
+    assertTrue(result.isFailure());
+    assertEquals(
+        "repository.scan.java_version_missing", result.fold(v -> null, PlatformError::code));
+  }
+
+  // --- scanWorkspace: multi-module discovery ---
+
+  @Test
+  void scanWorkspaceReturnsRootAndEveryDeclaredModule(@TempDir Path dir) throws IOException {
+    writeMinimalParentPom(dir, List.of("service-a", "service-b"));
+    writeMinimalChildPom(dir, "service-a");
+    writeMinimalChildPom(dir, "service-b");
+
+    Result<List<RepositorySnapshot>, PlatformError> result = RepositoryScanner.scanWorkspace(dir);
+
+    assertTrue(result.isSuccess(), () -> "expected success, got: " + result);
+    List<RepositorySnapshot> snapshots = result.fold(value -> value, error -> null);
+    assertEquals(3, snapshots.size(), "root + 2 declared modules");
+    assertEquals("workspace-parent", snapshots.get(0).coordinates().artifactId());
+    assertEquals("service-a", snapshots.get(1).coordinates().artifactId());
+    assertEquals("service-b", snapshots.get(2).coordinates().artifactId());
+  }
+
+  @Test
+  void scanWorkspaceReturnsJustTheRootWhenNoModulesAreDeclared(@TempDir Path dir)
+      throws IOException {
+    writeMinimalParentPom(dir, List.of());
+
+    Result<List<RepositorySnapshot>, PlatformError> result = RepositoryScanner.scanWorkspace(dir);
+
+    assertTrue(result.isSuccess());
+    assertEquals(1, result.fold(value -> value, error -> null).size());
+  }
+
+  @Test
+  void scanWorkspaceFailsWhenADeclaredModuleDoesNotExistOnDisk(@TempDir Path dir)
+      throws IOException {
+    writeMinimalParentPom(dir, List.of("missing-module"));
+
+    Result<List<RepositorySnapshot>, PlatformError> result = RepositoryScanner.scanWorkspace(dir);
+
+    assertTrue(result.isFailure());
+    assertEquals("repository.scan.pom_missing", result.fold(v -> null, PlatformError::code));
+  }
+
+  @Test
+  void rejectsNullWorkspaceRoot() {
+    assertThrows(NullPointerException.class, () -> RepositoryScanner.scanWorkspace(null));
+  }
+
+  private static void writeMinimalParentPom(Path dir, List<String> modules) throws IOException {
+    String modulesXml =
+        modules.isEmpty()
+            ? ""
+            : "<modules>"
+                + modules.stream()
+                    .map(m -> "<module>" + m + "</module>")
+                    .collect(java.util.stream.Collectors.joining())
+                + "</modules>";
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        "<?xml version=\"1.0\"?><project>"
+            + "<groupId>com.example</groupId><artifactId>workspace-parent</artifactId><version>1.0.0</version>"
+            + "<packaging>pom</packaging>"
+            + modulesXml
+            + "<properties><maven.compiler.release>21</maven.compiler.release></properties>"
+            + "</project>");
+  }
+
+  private static void writeMinimalChildPom(Path dir, String moduleName) throws IOException {
+    Path childDir = Files.createDirectories(dir.resolve(moduleName));
+    Files.writeString(
+        childDir.resolve("pom.xml"),
+        "<?xml version=\"1.0\"?><project>"
+            + "<parent><groupId>com.example</groupId><artifactId>workspace-parent</artifactId><version>1.0.0</version></parent>"
+            + "<artifactId>"
+            + moduleName
+            + "</artifactId>"
+            + "</project>");
   }
 }

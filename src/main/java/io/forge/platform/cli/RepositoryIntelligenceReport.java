@@ -7,12 +7,18 @@ import io.forge.platform.intelligence.architecture.CyclicPackageGroup;
 import io.forge.platform.intelligence.repository.RepositoryScanner;
 import io.forge.platform.intelligence.repository.RepositorySnapshot;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 /**
- * Renders a human-readable Repository + Architecture Intelligence report for a single module — the
- * smallest useful surface that makes {@link RepositoryScanner} and {@link CycleDetector}
- * (previously reachable only from unit tests) visible to an actual user.
+ * Renders a human-readable Repository + Architecture Intelligence report for a module or a whole
+ * multi-module workspace — the smallest useful surface that makes {@link RepositoryScanner} and
+ * {@link CycleDetector} (previously reachable only from unit tests) visible to an actual user.
+ *
+ * <p>Always scans via {@link RepositoryScanner#scanWorkspace(Path)} rather than branching on
+ * whether the target declares Maven {@code <modules>}: a single-module project's parent has no
+ * declared modules, so {@code scanWorkspace} naturally returns a one-element list — the
+ * single-module and multi-module cases are the same code path, not two.
  *
  * <p>Deliberately framework-free and independently testable: the CLI adapter ({@code
  * RepositoryIntelligenceCli}) is a thin Spring {@code CommandLineRunner} that calls {@link
@@ -24,35 +30,50 @@ final class RepositoryIntelligenceReport {
   private RepositoryIntelligenceReport() {}
 
   /**
-   * Generates the report for the module rooted at {@code target}.
+   * Generates the report for the module or workspace rooted at {@code target}.
    *
-   * @param target the module root to scan
+   * @param target the module or workspace root to scan
    * @return the rendered report and whether the scan itself succeeded
    */
   static Outcome generate(Path target) {
-    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(target);
+    Result<List<RepositorySnapshot>, PlatformError> result =
+        RepositoryScanner.scanWorkspace(target);
 
     return result.fold(
-        snapshot -> new Outcome(renderSuccess(target, snapshot), true),
+        snapshots -> new Outcome(renderSuccess(target, snapshots), true),
         error -> new Outcome(renderFailure(target, error), false));
   }
 
-  private static String renderSuccess(Path target, RepositorySnapshot snapshot) {
-    Set<CyclicPackageGroup> cycles = CycleDetector.findCycles(snapshot.internalDependencies());
-
+  private static String renderSuccess(Path target, List<RepositorySnapshot> snapshots) {
     StringBuilder report = new StringBuilder();
     report
         .append("Forge AI Platform — Repository Intelligence Report\n")
         .append("Scanned: ")
         .append(target.toAbsolutePath())
         .append('\n')
-        .append("Module: ")
+        .append("Modules: ")
+        .append(snapshots.size())
+        .append('\n');
+
+    for (RepositorySnapshot snapshot : snapshots) {
+      report.append('\n');
+      appendModule(report, snapshot);
+    }
+
+    return report.toString();
+  }
+
+  private static void appendModule(StringBuilder report, RepositorySnapshot snapshot) {
+    Set<CyclicPackageGroup> cycles = CycleDetector.findCycles(snapshot.internalDependencies());
+
+    report
+        .append("--- ")
         .append(snapshot.coordinates().groupId())
         .append(':')
         .append(snapshot.coordinates().artifactId())
         .append(':')
         .append(snapshot.coordinates().version())
-        .append('\n')
+        .append(" ---\n")
         .append("Java version: ")
         .append(snapshot.javaVersion())
         .append('\n')
@@ -61,7 +82,6 @@ final class RepositoryIntelligenceReport {
         .append('\n')
         .append("Internal package dependencies: ")
         .append(snapshot.internalDependencies().size())
-        .append('\n')
         .append('\n');
 
     if (cycles.isEmpty()) {
@@ -78,8 +98,6 @@ final class RepositoryIntelligenceReport {
             .append('\n');
       }
     }
-
-    return report.toString();
   }
 
   private static String renderFailure(Path target, PlatformError error) {

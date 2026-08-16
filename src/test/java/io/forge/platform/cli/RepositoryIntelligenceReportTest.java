@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -121,5 +122,52 @@ class RepositoryIntelligenceReportTest {
     assertTrue(outcome.succeeded());
     assertTrue(outcome.text().contains("Packages: 0"));
     assertTrue(outcome.text().contains("Circular dependencies: none detected"));
+  }
+
+  @Test
+  void rendersEveryModuleOfAMultiModuleWorkspace(@TempDir Path dir) throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>workspace-parent</artifactId>
+          <version>1.0.0</version>
+          <packaging>pom</packaging>
+          <modules>
+            <module>service-a</module>
+            <module>service-b</module>
+          </modules>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+    for (String module : List.of("service-a", "service-b")) {
+      Path moduleDir = Files.createDirectories(dir.resolve(module));
+      Files.writeString(
+          moduleDir.resolve("pom.xml"),
+          """
+          <?xml version="1.0"?>
+          <project>
+            <parent>
+              <groupId>com.example</groupId>
+              <artifactId>workspace-parent</artifactId>
+              <version>1.0.0</version>
+            </parent>
+            <artifactId>%s</artifactId>
+          </project>
+          """
+              .formatted(module));
+    }
+
+    RepositoryIntelligenceReport.Outcome outcome = RepositoryIntelligenceReport.generate(dir);
+
+    assertTrue(outcome.succeeded());
+    assertTrue(outcome.text().contains("Modules: 3"), "parent + 2 children");
+    assertTrue(outcome.text().contains("com.example:workspace-parent:1.0.0"));
+    assertTrue(outcome.text().contains("com.example:service-a:1.0.0"));
+    assertTrue(outcome.text().contains("com.example:service-b:1.0.0"));
   }
 }

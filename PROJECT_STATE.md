@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). `intelligence.repository` (ADR-025) + `intelligence.architecture` (ADR-026) implemented and dogfooded. New: `io.forge.platform.cli` (ADR-027) — first Products-layer code, makes the above actually runnable/visible: `java -jar forge-ai.jar scan [path]` prints a Repository + Architecture Intelligence report. 140/140 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). `intelligence.repository` (ADR-025) + `intelligence.architecture` (ADR-026) + `cli` (ADR-027) implemented. New: multi-module scanning + Maven parent inheritance (ADR-028) — `RepositoryScanner.scanWorkspace` + coordinate/java-version inheritance from `<parent>`, validated end-to-end against DLMP's real 8-module workspace (read-only; found a genuine circular dependency in `loan-service`). 149/149 tests passing.
 
 ---
 
@@ -62,8 +62,11 @@ src/main/java/io/forge/platform/ai/
 src/main/java/io/forge/platform/intelligence/
 └── repository/
     ├── RepositoryScanner.java       (final: scan(Path) -> Result<RepositorySnapshot, PlatformError>;
-    │                                  reads pom.xml + walks src/main/java + parses import lines,
-    │                                  no AI involved, no compilation required)
+    │                                  scanWorkspace(Path) -> Result<List<RepositorySnapshot>, ...>
+    │                                  for a whole multi-module project (ADR-028); resolves Maven
+    │                                  parent-inherited groupId/version/java.version; reads pom.xml
+    │                                  + walks src/main/java + parses import lines, no AI, no
+    │                                  compilation required)
     ├── RepositorySnapshot.java      (coordinates, javaVersion, packages, internalDependencies)
     ├── PackageSummary.java          (name, classCount)
     ├── PackageDependency.java       (fromPackage, toPackage — observed internal import facts only;
@@ -87,10 +90,13 @@ src/main/java/io/forge/platform/cli/
 Run it (both verified working end-to-end, not assumed):
 - `./mvnw clean package && java -jar target/forge-ai-0.1.0-SNAPSHOT.jar scan [path]`
 - or during development: `./mvnw spring-boot:run -Dspring-boot.run.arguments=scan`
+- `[path]` can be a single Maven module or a multi-module project root — the CLI always uses `scanWorkspace` and reports every module found.
 
-140/140 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, and `cli` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 93% branch coverage — `intelligence.architecture` and `cli.RepositoryIntelligenceReport` are both 100%/100%; the remaining gaps are documented, deliberate omissions — a `System.exit` branch untestable without killing the test JVM, pre-existing `RepositoryScanner` edge cases with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+149/149 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, and `cli` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 96% instruction / 92% branch coverage — `intelligence.architecture` and `cli.RepositoryIntelligenceReport` are both 100%/100%; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
 
 **Clean-checkout defect found and fixed:** `mvnw`/`mvnw.cmd`/`.mvn/` were gitignored — a fresh clone had no Maven wrapper at all (verified by actually cloning to a scratch directory, not assumed). This would have broken CI on the first push and every README-documented onboarding step. Fixed: wrapper now tracked, re-verified via a second fresh clone that `./mvnw clean verify` succeeds standalone. CI (`ci.yml`) also given Maven dependency caching (`cache: maven` on `actions/setup-java`).
+
+**Multi-module scanning + Maven parent inheritance (ADR-028):** validated end-to-end against DLMP — an independent, real, 8-module Spring Boot project on this machine (read-only; never modified). Correctly inherited `groupId`/`version`/`java.version` for every child module and found a genuine circular dependency in `loan-service` (`command` ↔ `saga`). This is the first evidence Forge's Engineering Intelligence foundation generalizes beyond its own repository.
 
 **`intelligence.repository` (ADR-025):** the first Engineering Intelligence capability. `RepositoryScanner` reads one Maven module's `pom.xml` and `src/main/java` tree into a deterministic `RepositorySnapshot` — build coordinates, Java version, per-package class counts. No AI, no inference, no external dependency beyond the JDK's built-in XML parser. Its own test suite dogfoods it against this repository (asserts the real `pom.xml`'s coordinates, Java 25, and `core.result`'s package/class count) — if the scanner and the repository it's scanning ever disagree, that test fails immediately.
 

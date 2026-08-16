@@ -639,6 +639,34 @@ Documenting `java -jar forge-ai.jar scan [path]` as the usage line, then actuall
 
 Establishes the "Products" layer's dependency shape: `cli` may depend on everything below it (`core`, `ai`, `intelligence`); nothing may depend on `cli` — enforced by `ArchitectureTest`, not just documented. Future product surfaces (a real API, a dashboard) follow the same one-directional shape.
 
+## ADR-028
+
+### Multi-Module Repository Scanning and Maven Parent Inheritance
+
+#### Decision
+
+`RepositoryScanner` gains `scanWorkspace(Path)`, scanning a parent module plus every module its `<modules>` declares, and `scan(Path)` now resolves `groupId`/`version`/`java.version` inherited from a local `<parent>` when a module doesn't declare them directly. `RepositoryIntelligenceReport` (the CLI) always calls `scanWorkspace`, since a single-module project's parent simply has no declared `<modules>` and naturally produces a one-element list — single- and multi-module targets are one code path, not two.
+
+#### Why
+
+ADR-025 explicitly deferred multi-module support: "no second module exists to validate against." That constraint no longer holds — DLMP, a real, independent, 8-module Spring Boot project already present on this machine, is exactly such a fixture. Designing against it (read-only; DLMP itself was never modified) surfaced a real requirement the original design missed entirely: properly-structured multi-module Maven projects have child modules that inherit `groupId`/`version`/`java.version` from their parent rather than redeclaring them — confirmed directly (`loan-service/pom.xml` declares only `artifactId`). Without handling this, the scanner would fail on every child module of any real multi-module project, which is the common case, not an edge case.
+
+Validated end-to-end against DLMP's full workspace (`java -jar forge-ai.jar scan <dlmp-root>`): correctly scanned all 8 modules (parent + 7 services), correctly inherited coordinates and Java 21 for every child, and found a genuine circular dependency in `loan-service` (`command` ↔ `saga`) — a real architectural finding about a real, independently-developed codebase, not a synthetic test case.
+
+#### Alternatives considered
+
+- Full Maven-model resolution (properties interpolation, dependency management inheritance, profiles): rejected — far beyond what "understand a repository's structure" needs; the common single-level local-parent case (verified against DLMP) covers the realistic scenario without building a Maven implementation.
+- Committing DLMP itself as a test fixture, or writing an automated test with DLMP's absolute path: rejected — would break reproducibility on a clean checkout or CI runner, where a sibling repository does not exist. Verified manually against DLMP for real-world confidence; the committed test suite uses only synthetic fixtures reproducing DLMP's exact shape.
+- Partial-success semantics for `scanWorkspace` (report successes and failures per module): rejected for now — fail-fast is simpler and has no concrete caller needing partial results yet; revisit if one appears.
+
+#### Trade-offs
+
+`scanWorkspace` does not recurse into nested `<modules>` (multi-level aggregation) — no real project on hand needs that yet either; single-level covers DLMP and is extensible later without a breaking change.
+
+#### Long-term impact
+
+Forge can now produce real findings about real, independent, multi-service systems — not just about itself. This is the first evidence the Engineering Intelligence foundation generalizes beyond its own repository, which is the actual bar "Engineering Model" work needs to clear before going further.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
