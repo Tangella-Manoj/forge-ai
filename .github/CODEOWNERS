@@ -1,8 +1,7 @@
 # CODEOWNERS
 # Assign ownership for critical paths. Update when maintainers change.
 
-/* @manoj
-/docs/ @manoj
-/.github/ @manoj
-/scripts/ @manoj
-/infra/ @manoj
+/* @Tangella-Manoj
+/docs/ @Tangella-Manoj
+/.github/ @Tangella-Manoj
+/scripts/ @Tangella-Manoj

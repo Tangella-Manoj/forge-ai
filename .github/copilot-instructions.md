@@ -30,16 +30,15 @@ Base package
 - io.forge.platform
 
 Technology stack
-- Java 25, Maven, Spring Boot, PostgreSQL, Redis, Kafka, Docker, Testcontainers, OpenTelemetry, Prometheus, Grafana.
-(See docs/09_TECHNICAL_STRATEGY.md)
+- Current, actually in the repository: Java 25, Maven, Spring Boot, ArchUnit (test-scope).
+- Long-term direction, not yet present (docs/09_TECHNICAL_STRATEGY.md): PostgreSQL, Redis, Kafka, Docker, Testcontainers, OpenTelemetry, Prometheus, Grafana. Do not assume any of these exist until you've checked pom.xml — this list is a plan, not current reality.
 
 Repository structure
-- docs/ platform/ applications/ services/ sdk/ agents/ prompts/ workflows/ infrastructure/ scripts/ testing/ examples/ assets/ tools/ .github/
-(See docs/05_REPOSITORY_BLUEPRINT.md)
+- Current, actual: a single Maven module (`src/main/java`, `src/test/java`), plus `docs/`, `.github/`, `scripts/` at the root. This is expected and correct for the project's current stage — not a violation of anything.
+- Target future structure (docs/05_REPOSITORY_BLUEPRINT.md), not yet grown into: docs/ platform/ applications/ services/ sdk/ agents/ prompts/ workflows/ infrastructure/ scripts/ testing/ examples/ assets/ tools/ .github/
 
 Naming conventions
-- Use full, descriptive names. Avoid abbreviations. e- Use full, descriptive names. Avoid abbreviations. e.g., Identity Service, Repository Service.
-  .g., Identity Service, Repository Service.
+- Use full, descriptive names. Avoid abbreviations, e.g., Identity Service, Repository Service.
 - Branches: feat/<scope>-short-description
 - Commits: Conventional Commits format.
 
@@ -47,10 +46,11 @@ Definition of Done (summary)
 - Requirements implemented, tests passing, documentation updated, API documented, security reviewed, logging/metrics added, performance considered, code reviewed.
 (See docs/06_ENGINEERING_STANDARDS.md and docs/08_ENGINEERING_DEVELOPMENT_LIFECYCLE.md)
 
-AI coding rules
-- AI may suggest code, but generated code must be reviewed, tested, and understandable before merging.
-- AI must not write production changes directly.
-- AI must reference docs/ before generating code.
+AI coding rules (CLAUDE.md is authoritative if this summary and it ever disagree)
+- AI may generate and commit code directly, including production code — this repository's actual practice, per CLAUDE.md §31. The gate is review and understanding before it's trusted, not a prohibition on AI writing it in the first place.
+- Generated code must be reviewed, tested, and understood by a human before being trusted (CLAUDE.md ADR-018) — code existing is not the same as code being trustworthy.
+- AI must reference docs/ (and CLAUDE.md) before generating code.
+- AI must never modify production systems autonomously, silently resolve genuine architectural ambiguity by guessing, or treat frozen architecture as open for redesign without a stated reason and an ADR (CLAUDE.md §32).
 
 Review process
 - Small PRs; architecture reviewed before implementation for cross-cutting changes.

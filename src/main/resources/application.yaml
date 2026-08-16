@@ -2,18 +2,10 @@ spring:
   application:
     name: forge-ai
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics
-  endpoint:
-    health:
-      probes:
-        enabled: true
-      show-details: never
-
-info:
-  app:
-    name: Forge AI
-    platform: OpenEIOS
+# spring-boot-starter-actuator is on the classpath (pom.xml) as forward-provisioning for health
+# checks once a web layer exists — this project's own deployment requirements name health checks
+# explicitly. Its web-exposure configuration (management.endpoints.web.exposure.include, etc.) is
+# deliberately NOT set here: with no spring-boot-starter-web, no embedded server starts (verified:
+# `java -jar ...` with no "scan" arg starts and exits with no port listening), so that config would
+# have zero effect and risk misleading a reader into thinking health checks are live. Add it back
+# alongside the web starter, not before.
