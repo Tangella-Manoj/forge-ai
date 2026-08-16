@@ -609,6 +609,36 @@ Recursive implementation has a real (if distant) stack-depth ceiling on patholog
 
 Dogfooded immediately: this repository's own package graph, scanned by its own tooling, is verified acyclic — the first real, non-trivial claim `intelligence.*` has produced about this codebase. Establishes the pattern for future Engineering Intelligence capabilities: `repository` gathers facts, other `intelligence.*` sub-capabilities analyze them, one-directional.
 
+## ADR-027
+
+### First Products-Layer Code: A Minimal CLI
+
+#### Decision
+
+Add `io.forge.platform.cli` — `RepositoryIntelligenceCli` (a Spring `CommandLineRunner`, gated behind an explicit `scan` command) and `RepositoryIntelligenceReport` (framework-free rendering logic, independently tested). Usage: `java -jar forge-ai.jar scan [path]`. First code in the "Products" layer (`CLAUDE.md` §4: `Core → Platform → AI Runtime → Engineering Intelligence → Products`).
+
+#### Why
+
+Three sessions had built `intelligence.repository` and `intelligence.architecture` — real, tested capabilities — but nothing made them runnable or visible to an actual human; the only way to see their output was reading unit test assertions. The project's own completion definition explicitly requires "usable interface/API/CLI" before Forge can be called demonstrable, and a CLI is the smallest such surface — no web layer, no new framework dependency (`CommandLineRunner` is already part of `spring-boot-starter`), no AI, no GitHub access needed.
+
+#### Alternatives considered
+
+- A REST API / web layer: rejected — would require adding `spring-boot-starter-web`, plus Validation/Serialization (Platform Services, still correctly deferred per ADR-023) to do properly; far more than the smallest justified surface for "make existing output visible."
+- Leave it CLI-invisible until a bigger product decision is made: rejected — this is exactly the kind of avoidable non-decision the project's own rules warn against ("do not stop for avoidable reasons"); a CLI needed no product-direction decision at all.
+- An unconditional `CommandLineRunner` (scan on every startup): implemented first, then rejected on self-review — fires on every Spring context boot, including this application's own tests (observed directly: a report printed during `ForgePlatformApplicationTests`). Harmless today (single-purpose app) but a real landmine once this application gains a second purpose (a web layer, a long-running service) that shouldn't be killable by an unrelated startup scan failing. Fixed by gating behind an explicit `scan` first argument before this ever shipped.
+
+#### Trade-offs
+
+`RepositoryIntelligenceReport`'s text output format is now a public-facing contract (of sorts) with exactly one real caller (this session's own tests) validating it. Low risk: it's plain human-readable text, not a machine-parsed format, and trivially changeable.
+
+#### A real gap this decision surfaced
+
+Documenting `java -jar forge-ai.jar scan [path]` as the usage line, then actually running it (rather than assuming a Javadoc comment is correct) found that the built jar had no runnable manifest at all — `spring-boot-maven-plugin` was never configured in `pom.xml`, so `mvn package` produced a plain, non-executable jar. Every prior session's `mvn clean verify` passed regardless, because nothing had ever tried to *run* the packaged artifact — only compile and test it. Fixed by adding the plugin (inheriting version/execution from `spring-boot-starter-parent`); a first attempt double-repackaged (an explicit execution block conflicting with the parent's already-managed default execution) — caught by reading the build log, not assumed correct, and simplified to a bare plugin declaration. Both the jar and `spring-boot:run` invocations re-verified working end-to-end after the fix.
+
+#### Long-term impact
+
+Establishes the "Products" layer's dependency shape: `cli` may depend on everything below it (`core`, `ai`, `intelligence`); nothing may depend on `cli` — enforced by `ArchitectureTest`, not just documented. Future product surfaces (a real API, a dashboard) follow the same one-directional shape.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

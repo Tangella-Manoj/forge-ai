@@ -65,6 +65,15 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.intelligence.architecture..");
 
   @ArchTest
+  static final ArchRule nothingDependsOnCli =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("io.forge.platform.cli..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.cli..");
+
+  @ArchTest
   static final ArchRule topLevelPackagesAreFreeOfCycles =
       slices().matching("io.forge.platform.(*)..").should().beFreeOfCycles();
 
