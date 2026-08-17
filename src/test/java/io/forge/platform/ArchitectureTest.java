@@ -74,6 +74,27 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.cli..");
 
   @ArchTest
+  static final ArchRule coreAiIntelligenceNeverDependOnReasoning =
+      noClasses()
+          .that()
+          .resideInAnyPackage(
+              "io.forge.platform.core..",
+              "io.forge.platform.ai..",
+              "io.forge.platform.intelligence..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.reasoning..");
+
+  @ArchTest
+  static final ArchRule reasoningNeverDependsOnCli =
+      noClasses()
+          .that()
+          .resideInAPackage("io.forge.platform.reasoning..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.cli..");
+
+  @ArchTest
   static final ArchRule topLevelPackagesAreFreeOfCycles =
       slices().matching("io.forge.platform.(*)..").should().beFreeOfCycles();
 

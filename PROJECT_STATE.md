@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` implemented (provider-neutral, ADR-024). GitHub blocker narrowed to exactly one step: `gh` CLI installed, needs `gh auth login` (interactive — cannot be done non-interactively). `intelligence.repository` (ADR-025) + `intelligence.architecture` (ADR-026) + `cli` (ADR-027) implemented. New: multi-module scanning + Maven parent inheritance (ADR-028) — `RepositoryScanner.scanWorkspace` + coordinate/java-version inheritance from `<parent>`, validated end-to-end against DLMP's real 8-module workspace (read-only; found a genuine circular dependency in `loan-service`). 149/149 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning + Maven parent inheritance (ADR-028) all implemented. New: `reasoning` (ADR-029) — `RepositoryAssessor` is the first capability combining Engineering Intelligence facts with the AI Runtime; deliberately not wired into the CLI yet (see Current Blockers — using a fixed test double for real user-facing output would misrepresent it as genuine AI reasoning). GitHub: `gh` is now authenticated, but as the wrong account (`Manoj-Ez`, a company account) — user confirmed `Tangella-Manoj` (same as DLMP) should own this repo instead; its SSH key already works on this machine, so only repo *creation* is blocked, not the push itself. 161/161 tests passing.
 
 ---
 
@@ -85,6 +85,13 @@ src/main/java/io/forge/platform/cli/
 │                                      an explicit "scan" first arg — see ADR-027 for why)
 └── RepositoryIntelligenceReport.java (package-private, framework-free: generate(Path) -> Outcome;
                                         renders coordinates/java version/packages/dependencies/cycles)
+
+src/main/java/io/forge/platform/reasoning/
+├── RepositoryAssessor.java          (final: assess(RepositorySnapshot, AiProvider) ->
+│                                      Result<ArchitectureAssessment, PlatformError> — ADR-029;
+│                                      the "Reason" stage; not wired into the CLI yet, see blockers)
+└── ArchitectureAssessment.java      (evidence: List<String>, narrative: String — kept separate
+                                       so fact and AI inference are never confused)
 ```
 
 Run it (both verified working end-to-end, not assumed):
@@ -92,7 +99,9 @@ Run it (both verified working end-to-end, not assumed):
 - or during development: `./mvnw spring-boot:run -Dspring-boot.run.arguments=scan`
 - `[path]` can be a single Maven module or a multi-module project root — the CLI always uses `scanWorkspace` and reports every module found.
 
-149/149 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, and `cli` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 96% instruction / 92% branch coverage — `intelligence.architecture` and `cli.RepositoryIntelligenceReport` are both 100%/100%; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+161/161 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 93% branch coverage — `intelligence.architecture`, `cli.RepositoryIntelligenceReport`, and `reasoning` are all 100%/100%; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+
+**`reasoning` (ADR-029):** `RepositoryAssessor` is the first capability combining Engineering Intelligence facts with the AI Runtime — builds an evidence list from a `RepositorySnapshot` (via `CycleDetector`), sends it to a caller-supplied `AiProvider`, returns both. Fully tested with `AiProvider.fixed`/`failing` doubles, including a prompt-capturing test proving the actual prompt sent embeds the real evidence, not a placeholder. Self-review caught a real trap before it shipped: wiring this into the CLI's default output using the fixed test double would print the same canned string regardless of what was actually found, which would misrepresent it as genuine AI-generated insight. Left un-wired rather than shipping something dishonest — ready to connect the moment either a real provider exists, or a decision is made to wire it in now with explicit "no real AI configured" labeling.
 
 **Clean-checkout defect found and fixed:** `mvnw`/`mvnw.cmd`/`.mvn/` were gitignored — a fresh clone had no Maven wrapper at all (verified by actually cloning to a scratch directory, not assumed). This would have broken CI on the first push and every README-documented onboarding step. Fixed: wrapper now tracked, re-verified via a second fresh clone that `./mvnw clean verify` succeeds standalone. CI (`ci.yml`) also given Maven dependency caching (`cache: maven` on `actions/setup-java`).
 
@@ -120,8 +129,9 @@ Run it (both verified working end-to-end, not assumed):
 
 ## Current Blockers
 
-1. **GitHub push**: `gh` CLI is installed but not authenticated. `gh auth status` confirms no logged-in host. Requires an interactive `gh auth login` (browser or device code) — cannot be done non-interactively or fabricated. Everything else (18 clean commits, verified clean-checkout build, no secrets) is ready; this is the only remaining step.
-2. **AI provider implementation**: blocked on two decisions that are not mine to make unilaterally (ADR-024) — which provider(s) to integrate, and API credentials. `ai.provider`'s interface is deliberately provider-neutral so this blocker stays contained to one future implementation class.
+1. **GitHub push**: `gh` is now authenticated — but as `Manoj-Ez`, a company account unrelated to this project, confirmed by the user. The user confirmed `Tangella-Manoj` (same account DLMP uses) should own this repository instead. That account's SSH key (`git@github-personal`, alias already in `~/.ssh/config`) is verified working on this machine (`ssh -T` succeeds) — so pushing itself is not blocked, only *creating* the repository is, since SSH push can't create a new repo and `gh auth login` for a second account requires an interactive flow. Waiting on the user to create the empty `Tangella-Manoj/forge-ai` repo (public, no README/license/gitignore) via the GitHub web UI; push is immediate once it exists — checked via `gh api repos/Tangella-Manoj/forge-ai` (404 as of this update).
+2. **AI provider implementation**: blocked on two decisions that are not mine to make unilaterally (ADR-024) — which provider(s) to integrate, and API credentials. `ai.provider`'s interface is deliberately provider-neutral so this blocker stays contained to one future implementation class. `reasoning.RepositoryAssessor` (ADR-029) is built and tested against this interface, ready to connect the moment a provider is chosen.
+3. **CLI wiring for `reasoning`**: a product-presentation decision, not an engineering blocker — wire `RepositoryAssessor` into the CLI now with explicit "no real AI configured, using a placeholder" labeling, or wait for a real provider. Not yet decided.
 
 Everything past `ai.provider`'s interface (`router`, `prompt`, `context`, `tool`, `mcp`, `memory`, `evaluation`, `guardrail`) remains blocked on having at least one real provider integration to validate against (`docs/15_..md` §4). Platform Services (ADR-023) remains deferred, expected to activate once a provider is chosen. Neither blocker affects `intelligence.*` (ADR-025) — that layer needs no AI and no push to keep growing.
 

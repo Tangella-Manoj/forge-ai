@@ -667,6 +667,34 @@ Validated end-to-end against DLMP's full workspace (`java -jar forge-ai.jar scan
 
 Forge can now produce real findings about real, independent, multi-service systems — not just about itself. This is the first evidence the Engineering Intelligence foundation generalizes beyond its own repository, which is the actual bar "Engineering Model" work needs to clear before going further.
 
+## ADR-029
+
+### First Reasoning Capability: `RepositoryAssessor`
+
+#### Decision
+
+Add `io.forge.platform.reasoning` — `RepositoryAssessor.assess(RepositorySnapshot, AiProvider) -> Result<ArchitectureAssessment, PlatformError>`, the first capability combining Engineering Intelligence facts (`intelligence.repository`/`intelligence.architecture`) with the AI Runtime (`ai.provider`). `ArchitectureAssessment` keeps deterministic `evidence` (facts) and AI-generated `narrative` (inference) as separate fields, never merged, so a caller can always tell which is which.
+
+New top-level package, sibling of `core`/`ai`/`intelligence`/`cli`. May depend on `ai`, `intelligence`, and `core`; nothing in those three may depend on it (enforced by `ArchitectureTest`, not just documented), and it may never depend on `cli`.
+
+#### Why
+
+This is the "Reason" stage of the product's stated pipeline (Repository → Understand → Analyze → Risk → **Reason** → Plan → ...), and the AI Runtime rules explicitly sanction building it now with a deterministic test double standing in for a real provider, so the rest of the product isn't blocked on a provider decision that remains genuinely outside this session's authority.
+
+#### Alternatives considered
+
+- Wire this into the CLI's default `scan` output using `AiProvider.fixed(...)`: rejected on self-review. A fixed provider always returns the same canned string regardless of the actual findings — presenting that as if it were real AI-generated insight would be actively misleading, not "provider-neutral design." The interface's whole purpose is testing the plumbing, not producing user-facing output that impersonates real reasoning. `RepositoryAssessor` is built, fully tested, and ready to wire into the CLI the moment a real provider exists, or wired in now with explicit, honest labeling that no real AI is behind it — deferred as a product-presentation choice, not an engineering blocker.
+- Put this logic inside `intelligence.*`: rejected — `intelligence` is deliberately deterministic, AI-free analysis (ADR-025's own framing); mixing in an AI Runtime dependency would blur that boundary for every existing and future `intelligence.*` capability, not just this one.
+- Put this logic inside `ai.*`: rejected — `ai` is the provider abstraction itself; consuming Engineering Intelligence facts is a different concern layered on top of it, not part of the abstraction.
+
+#### Trade-offs
+
+The prompt text `RepositoryAssessor` builds is now a real, if informal, contract — get it wrong and a future real-provider swap needs rework. Mitigated by keeping it simple (plain evidence lines, one instruction sentence) and validating its shape via a capturing test double, not just trusting it compiles.
+
+#### Long-term impact
+
+Establishes the pattern for every future capability that needs both Engineering Intelligence facts and AI reasoning: depend on both, stay out of `cli`, keep evidence and inference visibly separate. The product's core pipeline shape (Understand → Analyze → Reason) now exists in code, end to end, even though the "Reason" stage's real intelligence is still pending a provider decision.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
