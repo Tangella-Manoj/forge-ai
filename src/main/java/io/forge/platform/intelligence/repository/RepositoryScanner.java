@@ -107,7 +107,45 @@ public final class RepositoryScanner {
             new BuildCoordinates(groupId, artifactId, version),
             javaVersion,
             sourceScan.packages(),
-            sourceScan.internalDependencies()));
+            sourceScan.internalDependencies(),
+            readDeclaredDependencyArtifactIds(project)));
+  }
+
+  private static Set<String> readDeclaredDependencyArtifactIds(Element project) {
+    // Deliberately NOT getElementsByTagName("dependencies") — that searches the whole document,
+    // and a <dependencyManagement><dependencies> block (version pins, not real applied
+    // dependencies) would be found first if it appears earlier in the file than a real top-level
+    // <dependencies> block. Verified against a real pom.xml with exactly this shape (a parent POM
+    // with only a dependencyManagement block, no top-level dependencies at all) before relying on
+    // getElementsByTagName here — it would have silently produced wrong facts. Only <project>'s
+    // own direct <dependencies> child is the module's real, applied dependency list.
+    Element dependenciesElement = directChild(project, "dependencies");
+    if (dependenciesElement == null) {
+      return Set.of();
+    }
+
+    Set<String> artifactIds = new LinkedHashSet<>();
+    NodeList children = dependenciesElement.getChildNodes();
+    for (int i = 0; i < children.getLength(); i++) {
+      if (children.item(i) instanceof Element dependency
+          && dependency.getTagName().equals("dependency")) {
+        String artifactId = childText(dependency, "artifactId");
+        if (artifactId != null) {
+          artifactIds.add(artifactId);
+        }
+      }
+    }
+    return artifactIds;
+  }
+
+  private static Element directChild(Element parent, String tagName) {
+    NodeList children = parent.getChildNodes();
+    for (int i = 0; i < children.getLength(); i++) {
+      if (children.item(i) instanceof Element element && element.getTagName().equals(tagName)) {
+        return element;
+      }
+    }
+    return null;
   }
 
   /**
@@ -158,11 +196,10 @@ public final class RepositoryScanner {
   }
 
   private static List<String> readModuleNames(Element project) {
-    NodeList modulesNodes = project.getElementsByTagName("modules");
-    if (modulesNodes.getLength() == 0) {
+    Element modulesElement = directChild(project, "modules");
+    if (modulesElement == null) {
       return List.of();
     }
-    Element modulesElement = (Element) modulesNodes.item(0);
     NodeList children = modulesElement.getChildNodes();
     List<String> names = new ArrayList<>();
     for (int i = 0; i < children.getLength(); i++) {
@@ -231,11 +268,13 @@ public final class RepositoryScanner {
   }
 
   private static Integer readJavaVersionFromOwnProperties(Element project) {
-    NodeList propertiesNodes = project.getElementsByTagName("properties");
-    if (propertiesNodes.getLength() == 0) {
+    // directChild, not getElementsByTagName — a <profile> can legitimately carry its own
+    // <properties> block; only <project>'s own direct child is the module's actual, always-applied
+    // properties.
+    Element properties = directChild(project, "properties");
+    if (properties == null) {
       return null;
     }
-    Element properties = (Element) propertiesNodes.item(0);
     for (String tag : List.of("maven.compiler.release", "java.version")) {
       String value = childText(properties, tag);
       if (value != null) {

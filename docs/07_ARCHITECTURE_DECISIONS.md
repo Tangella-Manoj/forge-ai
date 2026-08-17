@@ -695,6 +695,37 @@ The prompt text `RepositoryAssessor` builds is now a real, if informal, contract
 
 Establishes the pattern for every future capability that needs both Engineering Intelligence facts and AI reasoning: depend on both, stay out of `cli`, keep evidence and inference visibly separate. The product's core pipeline shape (Understand → Analyze → Reason) now exists in code, end to end, even though the "Reason" stage's real intelligence is still pending a provider decision.
 
+## ADR-030
+
+### Engineering Model: `intelligence.model`
+
+#### Decision
+
+Add `io.forge.platform.intelligence.model` — `EngineeringModel` (modules + inter-module dependencies, with a `dependentsOf(artifactId)` traversal), `ModuleDependency`, and `EngineeringModelBuilder`. `RepositorySnapshot` gains a fifth field, `declaredDependencyArtifactIds`: the raw, unresolved set of artifactIds each module's own `pom.xml` declares.
+
+Resolution is deliberately split: `RepositoryScanner` collects the raw fact (it cannot know whether a given artifactId is a sibling module or an external library), and `EngineeringModelBuilder` resolves it against the workspace's full module set. This is the identical deferred-resolution pattern already used for `PackageDependency` (ADR-028) — reused, not reinvented.
+
+#### Why
+
+The roadmap's "Engineering Model / Engineering Knowledge" stage needs a representation of a repository *as a system*, not just a bag of independent modules. The concrete question motivating it — "if module X changes, what else in this workspace could be affected?" — is the direct prerequisite for Change Intelligence and Risk Intelligence, the next two roadmap stages.
+
+Validated against DLMP's real 8-module workspace: correctly produced all six real `service -> common` dependencies, correctly excluded external libraries (Spring Boot starters, Kafka, Resilience4j etc.), and correctly excluded `common`'s own `<artifactId>` self-reference. Cross-checked independently against DLMP's actual `pom.xml` files rather than trusting the output looked plausible.
+
+#### Alternatives considered
+
+- A general-purpose node/edge graph with a query engine: rejected outright — the standing instruction is explicit ("do not introduce a huge generic knowledge graph", "start with the simplest representation"). Two typed lists answer the actual question; a graph engine answers hypothetical ones.
+- Persistence (embedded database, serialized model): rejected — nothing yet needs the model to outlive a single process. Adding storage now would be infrastructure ahead of a use case.
+- Full Maven dependency resolution (transitive external dependencies, version conflicts, scopes): rejected — that is Maven's job, and the product question here is about *workspace* structure, not the full external dependency tree.
+- Inferring service-to-service HTTP relationships from configuration (DLMP's `api-gateway` routes to five services it has no Maven dependency on): deliberately deferred, and `ModuleDependency`'s Javadoc says so explicitly rather than leaving the omission silent. That is a real, different relationship kind; conflating it with build-time coupling would make the model lie about what it knows.
+
+#### A real bug this decision surfaced
+
+The first implementation used `getElementsByTagName("dependencies")` to find a module's dependency list. That searches the entire document — so for a pom with only a `<dependencyManagement><dependencies>` block and no top-level `<dependencies>` (exactly DLMP's root pom's shape), it would have silently reported version-pinned management entries as real applied dependencies. Caught by checking a real `pom.xml` before shipping, not after. Fixed by resolving only `<project>`'s *direct* children, and the same latent bug was audited and fixed in the two other places using the same pattern (`readModuleNames`, `readJavaVersionFromOwnProperties` — the latter would have picked up a `<profile>`'s properties block).
+
+#### Long-term impact
+
+Change Intelligence ("what does this change affect?") and Risk Intelligence ("how risky is it?") now have a real structure to reason over. The model stays honest about its own limits: it represents build-time coupling only, and says so.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

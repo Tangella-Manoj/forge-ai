@@ -28,7 +28,11 @@ class RepositoryAssessorTest {
   void assessesAnAcyclicModule() {
     RepositorySnapshot snapshot =
         new RepositorySnapshot(
-            COORDINATES, 21, List.of(new PackageSummary("com.example.demo", 3)), Set.of());
+            COORDINATES,
+            21,
+            List.of(new PackageSummary("com.example.demo", 3)),
+            Set.of(),
+            Set.of());
     AiProvider provider = AiProvider.fixed(new AiCompletion("Looks healthy."));
 
     Result<ArchitectureAssessment, PlatformError> result =
@@ -50,7 +54,8 @@ class RepositoryAssessorTest {
             COORDINATES,
             21,
             List.of(new PackageSummary("a", 1), new PackageSummary("b", 1)),
-            Set.of(new PackageDependency("a", "b"), new PackageDependency("b", "a")));
+            Set.of(new PackageDependency("a", "b"), new PackageDependency("b", "a")),
+            Set.of());
     AiProvider provider = AiProvider.fixed(new AiCompletion("There is a tight coupling risk."));
 
     Result<ArchitectureAssessment, PlatformError> result =
@@ -65,7 +70,8 @@ class RepositoryAssessorTest {
 
   @Test
   void propagatesProviderFailure() {
-    RepositorySnapshot snapshot = new RepositorySnapshot(COORDINATES, 21, List.of(), Set.of());
+    RepositorySnapshot snapshot =
+        new RepositorySnapshot(COORDINATES, 21, List.of(), Set.of(), Set.of());
     PlatformError error =
         InfrastructureError.of("ai.provider.unavailable", "Provider did not respond");
     AiProvider provider = AiProvider.failing(error);
@@ -81,7 +87,11 @@ class RepositoryAssessorTest {
   void sendsThePromptBuiltFromEvidence() {
     RepositorySnapshot snapshot =
         new RepositorySnapshot(
-            COORDINATES, 21, List.of(new PackageSummary("com.example.demo", 3)), Set.of());
+            COORDINATES,
+            21,
+            List.of(new PackageSummary("com.example.demo", 3)),
+            Set.of(),
+            Set.of());
     AtomicReference<AiPrompt> capturedPrompt = new AtomicReference<>();
     AiProvider capturingProvider =
         prompt -> {
@@ -107,7 +117,8 @@ class RepositoryAssessorTest {
 
   @Test
   void rejectsNullProvider() {
-    RepositorySnapshot snapshot = new RepositorySnapshot(COORDINATES, 21, List.of(), Set.of());
+    RepositorySnapshot snapshot =
+        new RepositorySnapshot(COORDINATES, 21, List.of(), Set.of(), Set.of());
     assertThrows(NullPointerException.class, () -> RepositoryAssessor.assess(snapshot, null));
   }
 }

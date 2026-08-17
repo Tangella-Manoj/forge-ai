@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning + Maven parent inheritance (ADR-028) all implemented. New: `reasoning` (ADR-029) — `RepositoryAssessor` is the first capability combining Engineering Intelligence facts with the AI Runtime; deliberately not wired into the CLI yet (see Current Blockers — using a fixed test double for real user-facing output would misrepresent it as genuine AI reasoning). GitHub: `gh` is now authenticated, but as the wrong account (`Manoj-Ez`, a company account) — user confirmed `Tangella-Manoj` (same as DLMP) should own this repo instead; its SSH key already works on this machine, so only repo *creation* is blocked, not the push itself. 161/161 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning + Maven parent inheritance (ADR-028), `reasoning` (ADR-029) all implemented. New: `intelligence.model` (ADR-030) — the Engineering Model: modules + real inter-module dependencies + `dependentsOf()` impact traversal, wired into the CLI and validated against DLMP's real 8-module workspace (correctly found all six `service -> common` dependencies, cross-checked against DLMP's actual poms). GitHub: `gh` is authenticated as `Manoj-Ez` (a company account); user confirmed `Tangella-Manoj` (same as DLMP) should own this repo — its SSH key already works here, so only repo *creation* is blocked, not the push. 188/188 tests passing.
 
 ---
 
@@ -86,6 +86,15 @@ src/main/java/io/forge/platform/cli/
 └── RepositoryIntelligenceReport.java (package-private, framework-free: generate(Path) -> Outcome;
                                         renders coordinates/java version/packages/dependencies/cycles)
 
+src/main/java/io/forge/platform/intelligence/
+└── model/
+    ├── EngineeringModel.java        (modules + moduleDependencies; dependentsOf(artifactId)
+    │                                  answers "if X changes, what else is affected?" — ADR-030)
+    ├── EngineeringModelBuilder.java (resolves each module's raw declaredDependencyArtifactIds
+    │                                  against the workspace's real module set)
+    └── ModuleDependency.java        (fromModule -> toModule; build-time coupling only, and its
+                                       Javadoc says so — HTTP/route relationships not claimed)
+
 src/main/java/io/forge/platform/reasoning/
 ├── RepositoryAssessor.java          (final: assess(RepositorySnapshot, AiProvider) ->
 │                                      Result<ArchitectureAssessment, PlatformError> — ADR-029;
@@ -99,7 +108,9 @@ Run it (both verified working end-to-end, not assumed):
 - or during development: `./mvnw spring-boot:run -Dspring-boot.run.arguments=scan`
 - `[path]` can be a single Maven module or a multi-module project root — the CLI always uses `scanWorkspace` and reports every module found.
 
-161/161 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 93% branch coverage — `intelligence.architecture`, `cli.RepositoryIntelligenceReport`, and `reasoning` are all 100%/100%; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+188/188 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `repository`/`model`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 94% branch coverage; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+
+**`intelligence.model` (ADR-030) — the Engineering Model:** represents a repository *as a system* rather than a bag of independent modules. `EngineeringModel.dependentsOf(artifactId)` answers the concrete question that motivated it — "if module X changes, what else in this workspace could be affected?" — the direct prerequisite for Change Intelligence and Risk Intelligence. Deliberately not a generic graph, no persistence, no query engine. Validated against DLMP's real 8-module workspace: found all six real `service -> common` dependencies, correctly excluded external libraries and `common`'s own self-reference, cross-checked independently against DLMP's actual `pom.xml` files. Building it also surfaced and fixed a real latent bug — `getElementsByTagName` searches the whole document, so a `<dependencyManagement>` block (or a `<profile>`'s `<properties>`) could be silently misread as a module's own; all three affected lookups now resolve only `<project>`'s direct children.
 
 **`reasoning` (ADR-029):** `RepositoryAssessor` is the first capability combining Engineering Intelligence facts with the AI Runtime — builds an evidence list from a `RepositorySnapshot` (via `CycleDetector`), sends it to a caller-supplied `AiProvider`, returns both. Fully tested with `AiProvider.fixed`/`failing` doubles, including a prompt-capturing test proving the actual prompt sent embeds the real evidence, not a placeholder. Self-review caught a real trap before it shipped: wiring this into the CLI's default output using the fixed test double would print the same canned string regardless of what was actually found, which would misrepresent it as genuine AI-generated insight. Left un-wired rather than shipping something dishonest — ready to connect the moment either a real provider exists, or a decision is made to wire it in now with explicit "no real AI configured" labeling.
 

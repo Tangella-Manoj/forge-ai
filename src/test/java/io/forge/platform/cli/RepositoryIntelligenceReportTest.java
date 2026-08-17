@@ -170,4 +170,68 @@ class RepositoryIntelligenceReportTest {
     assertTrue(outcome.text().contains("com.example:service-a:1.0.0"));
     assertTrue(outcome.text().contains("com.example:service-b:1.0.0"));
   }
+
+  @Test
+  void rendersRealModuleDependenciesBetweenServices(@TempDir Path dir) throws IOException {
+    // Reproduces DLMP's real shape: a "common" module that another service module declares a
+    // real Maven <dependency> on.
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>workspace-parent</artifactId>
+          <version>1.0.0</version>
+          <packaging>pom</packaging>
+          <modules>
+            <module>common</module>
+            <module>loan-service</module>
+          </modules>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+    Path commonDir = Files.createDirectories(dir.resolve("common"));
+    Files.writeString(
+        commonDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>workspace-parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>common</artifactId>
+        </project>
+        """);
+    Path loanServiceDir = Files.createDirectories(dir.resolve("loan-service"));
+    Files.writeString(
+        loanServiceDir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>workspace-parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>loan-service</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.example</groupId>
+              <artifactId>common</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """);
+
+    RepositoryIntelligenceReport.Outcome outcome = RepositoryIntelligenceReport.generate(dir);
+
+    assertTrue(outcome.succeeded());
+    assertTrue(outcome.text().contains("Module dependencies (within this workspace)"));
+    assertTrue(outcome.text().contains("loan-service -> common"));
+  }
 }

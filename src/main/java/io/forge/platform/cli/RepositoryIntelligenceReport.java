@@ -4,9 +4,13 @@ import io.forge.platform.core.error.PlatformError;
 import io.forge.platform.core.result.Result;
 import io.forge.platform.intelligence.architecture.CycleDetector;
 import io.forge.platform.intelligence.architecture.CyclicPackageGroup;
+import io.forge.platform.intelligence.model.EngineeringModel;
+import io.forge.platform.intelligence.model.EngineeringModelBuilder;
+import io.forge.platform.intelligence.model.ModuleDependency;
 import io.forge.platform.intelligence.repository.RepositoryScanner;
 import io.forge.platform.intelligence.repository.RepositorySnapshot;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -60,7 +64,38 @@ final class RepositoryIntelligenceReport {
       appendModule(report, snapshot);
     }
 
+    // Only meaningful with more than one module — a single module has nothing in the same
+    // workspace to depend on, so the section would always be an empty, noisy line.
+    if (snapshots.size() > 1) {
+      report.append('\n');
+      appendEngineeringModel(report, snapshots);
+    }
+
     return report.toString();
+  }
+
+  private static void appendEngineeringModel(
+      StringBuilder report, List<RepositorySnapshot> snapshots) {
+    EngineeringModel model = EngineeringModelBuilder.build(snapshots);
+
+    report.append("--- Module dependencies (within this workspace) ---\n");
+    if (model.moduleDependencies().isEmpty()) {
+      report.append("None detected.\n");
+      return;
+    }
+    for (ModuleDependency dependency :
+        model.moduleDependencies().stream()
+            .sorted(
+                Comparator.comparing(ModuleDependency::fromModule)
+                    .thenComparing(ModuleDependency::toModule))
+            .toList()) {
+      report
+          .append("  ")
+          .append(dependency.fromModule())
+          .append(" -> ")
+          .append(dependency.toModule())
+          .append('\n');
+    }
   }
 
   private static void appendModule(StringBuilder report, RepositorySnapshot snapshot) {

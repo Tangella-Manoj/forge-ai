@@ -64,6 +64,17 @@ class RepositoryScannerTest {
         snapshot.internalDependencies().stream()
             .noneMatch(d -> d.fromPackage().equals("io.forge.platform.core.validation")),
         "core.validation imports only java.util.Objects — zero internal dependencies");
+
+    // Real, verified facts about this repository's actual pom.xml <dependencies> (checked via
+    // grep before writing this assertion, not guessed).
+    assertEquals(
+        Set.of(
+            "spring-boot-starter",
+            "spring-boot-starter-actuator",
+            "spring-boot-starter-validation",
+            "spring-boot-starter-test",
+            "archunit-junit5"),
+        snapshot.declaredDependencyArtifactIds());
   }
 
   @Test
@@ -273,6 +284,103 @@ class RepositoryScannerTest {
   @Test
   void rejectsNullModuleRoot() {
     assertThrows(NullPointerException.class, () -> RepositoryScanner.scan(null));
+  }
+
+  // --- declaredDependencyArtifactIds ---
+
+  @Test
+  void extractsDeclaredDependencyArtifactIds(@TempDir Path dir) throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>demo</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+          <dependencies>
+            <dependency>
+              <groupId>com.example</groupId>
+              <artifactId>common</artifactId>
+            </dependency>
+            <dependency>
+              <groupId>org.springframework.boot</groupId>
+              <artifactId>spring-boot-starter-web</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(dir);
+
+    assertTrue(result.isSuccess());
+    assertEquals(
+        Set.of("common", "spring-boot-starter-web"),
+        result.fold(RepositorySnapshot::declaredDependencyArtifactIds, e -> null));
+  }
+
+  @Test
+  void doesNotMistakeADependencyManagementBlockForRealDependencies(@TempDir Path dir)
+      throws IOException {
+    // Real bug, caught by checking against a real pom.xml before shipping: a naive
+    // getElementsByTagName("dependencies") search finds a <dependencyManagement><dependencies>
+    // block too (version pins, not real applied dependencies) if the file has no top-level
+    // <dependencies> at all — exactly DLMP's own root pom.xml shape.
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>demo-parent</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>should-not-appear</artifactId>
+                <version>1.0.0</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(dir);
+
+    assertTrue(result.isSuccess());
+    assertTrue(
+        result.fold(RepositorySnapshot::declaredDependencyArtifactIds, e -> null).isEmpty(),
+        "a dependencyManagement-only pom has no real applied dependencies of its own");
+  }
+
+  @Test
+  void hasNoDeclaredDependencyArtifactIdsWhenNoDependenciesElementExists(@TempDir Path dir)
+      throws IOException {
+    Files.writeString(
+        dir.resolve("pom.xml"),
+        """
+        <?xml version="1.0"?>
+        <project>
+          <groupId>com.example</groupId>
+          <artifactId>demo</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <maven.compiler.release>21</maven.compiler.release>
+          </properties>
+        </project>
+        """);
+
+    Result<RepositorySnapshot, PlatformError> result = RepositoryScanner.scan(dir);
+
+    assertTrue(result.isSuccess());
+    assertTrue(result.fold(RepositorySnapshot::declaredDependencyArtifactIds, e -> null).isEmpty());
   }
 
   // --- Maven parent inheritance: verified against a real multi-module project (DLMP) before
