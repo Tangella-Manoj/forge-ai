@@ -726,6 +726,43 @@ The first implementation used `getElementsByTagName("dependencies")` to find a m
 
 Change Intelligence ("what does this change affect?") and Risk Intelligence ("how risky is it?") now have a real structure to reason over. The model stays honest about its own limits: it represents build-time coupling only, and says so.
 
+## ADR-031
+
+### Change Intelligence, and Removing `System.exit` from the CLI's Testable Surface
+
+#### Decision
+
+Add `io.forge.platform.intelligence.change` — `ChangeImpactAnalyzer.analyze(EngineeringModel, String) -> Result<ChangeImpact, PlatformError>`, splitting affected modules into **direct** and **transitive** dependents. Exposed as a real command: `java -jar forge-ai.jar impact <module> [path]`.
+
+Separately, `RepositoryIntelligenceCli` gains a package-private `execute(String...)` returning `boolean`; `run(...)` becomes a two-line adapter that translates that into `System.exit`. The exit decision now belongs to the process boundary, not to the command logic.
+
+#### Why
+
+Change Intelligence is the roadmap stage directly after the Engineering Model, and the model built in ADR-030 is exactly what it needs. Direct and transitive dependents are kept separate rather than summed because they warrant different engineering attention — a module that recompiles against your change is a stronger signal than one coupled through an intermediary, and collapsing them into one number discards the distinction an engineer actually needs.
+
+Asking about a module not in the workspace is a `DomainError`, not an empty result: "nothing depends on this" and "no such module" are different answers, and returning the former for the latter would hide a typo behind a confident-looking zero.
+
+#### The `System.exit` change — caused by a real, self-inflicted failure
+
+The first version of the `impact` command returned its usage message as a *failed* outcome. `run(...)` then called `System.exit(1)` — which killed the surefire JVM running the CLI's own test class, taking the whole build down mid-suite ("The forked VM terminated without properly saying goodbye"). Two distinct bugs, both fixed:
+
+1. Printed usage is normal operation, not failure. It now returns success.
+2. More importantly, the design was wrong: any command logic that can call `System.exit` is hostile to its own tests and to any future embedding (a web layer calling the same logic must not be able to kill the server). Splitting the decision (`execute` returns a boolean) from the action (`run` exits) fixes the class of problem, not just the instance. A regression test now pins the usage-is-success contract specifically.
+
+#### Alternatives considered
+
+- Keep `System.exit` and have tests avoid the failing paths: rejected — that leaves a real landmine in place and makes the most important paths (the failing ones) permanently untestable.
+- A `SecurityManager`/exit-trapping test harness: rejected — deprecated for removal in modern Java, and vastly more machinery than moving one line.
+- Report affected modules as a single combined set: rejected, see above.
+
+#### Trade-offs
+
+`execute` is package-private rather than public — testable from the CLI's own package without becoming a public API contract this early. Revisit if a web layer needs to invoke commands programmatically.
+
+#### Long-term impact
+
+Forge can now answer a real engineering question end to end: *scan a repository → build its engineering model → determine what a change affects → report it with its own limits stated*. Verified live against DLMP: changing `common` correctly affects all 6 services, directly, with the build-time-coupling caveat printed rather than implied.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

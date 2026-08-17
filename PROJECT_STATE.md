@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning + Maven parent inheritance (ADR-028), `reasoning` (ADR-029) all implemented. New: `intelligence.model` (ADR-030) — the Engineering Model: modules + real inter-module dependencies + `dependentsOf()` impact traversal, wired into the CLI and validated against DLMP's real 8-module workspace (correctly found all six `service -> common` dependencies, cross-checked against DLMP's actual poms). GitHub: `gh` is authenticated as `Manoj-Ez` (a company account); user confirmed `Tangella-Manoj` (same as DLMP) should own this repo — its SSH key already works here, so only repo *creation* is blocked, not the push. 188/188 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning (ADR-028), `reasoning` (ADR-029), `intelligence.model` (ADR-030) all implemented. New: `intelligence.change` (ADR-031) — Change Intelligence, exposed as `forge-ai impact <module> [path]`; also removed `System.exit` from the CLI's testable surface after it killed the build's own JVM. Forge now answers a real engineering question end to end: scan → model → impact → evidence-backed report. Validated live against DLMP (changing `common` correctly affects all 6 services). GitHub: `gh` authenticated as `Manoj-Ez` (company account); user confirmed `Tangella-Manoj` (same as DLMP) should own this repo — its SSH key already works here, so only repo *creation* is blocked, not the push. 211/211 tests passing.
 
 ---
 
@@ -95,6 +95,14 @@ src/main/java/io/forge/platform/intelligence/
     └── ModuleDependency.java        (fromModule -> toModule; build-time coupling only, and its
                                        Javadoc says so — HTTP/route relationships not claimed)
 
+src/main/java/io/forge/platform/intelligence/
+└── change/
+    ├── ChangeImpactAnalyzer.java    (final: analyze(EngineeringModel, module) ->
+    │                                  Result<ChangeImpact, PlatformError> — ADR-031; unknown
+    │                                  module is a DomainError, not a misleading empty result)
+    └── ChangeImpact.java            (changedModule, directDependents, transitiveDependents —
+                                       kept separate, not summed: different engineering weight)
+
 src/main/java/io/forge/platform/reasoning/
 ├── RepositoryAssessor.java          (final: assess(RepositorySnapshot, AiProvider) ->
 │                                      Result<ArchitectureAssessment, PlatformError> — ADR-029;
@@ -103,12 +111,16 @@ src/main/java/io/forge/platform/reasoning/
                                        so fact and AI inference are never confused)
 ```
 
-Run it (both verified working end-to-end, not assumed):
-- `./mvnw clean package && java -jar target/forge-ai-0.1.0-SNAPSHOT.jar scan [path]`
+Run it (all verified working end-to-end, not assumed — including exit codes: 0 on success, 1 on failure):
+- `./mvnw clean package`, then:
+  - `java -jar target/forge-ai-0.1.0-SNAPSHOT.jar scan [path]` — structure, packages, dependencies, cycles, and (multi-module only) inter-module dependencies.
+  - `java -jar target/forge-ai-0.1.0-SNAPSHOT.jar impact <module> [path]` — what else in the workspace a change to `<module>` affects.
 - or during development: `./mvnw spring-boot:run -Dspring-boot.run.arguments=scan`
 - `[path]` can be a single Maven module or a multi-module project root — the CLI always uses `scanWorkspace` and reports every module found.
 
-188/188 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `repository`/`model`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 94% branch coverage; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+211/211 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `repository`+`model`/`change`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 94% branch coverage; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+
+**`intelligence.change` (ADR-031) — Change Intelligence:** answers "if I change module X, what else is affected?", splitting direct from transitive dependents (different engineering weight; summing them would discard the distinction). Exposed as `forge-ai impact <module> [path]`. Verified live against DLMP: changing `common` correctly reports all 6 services as direct dependents, and the report always states its own limit (build-time Maven coupling only — DLMP's `api-gateway` routes to services over HTTP with no Maven dependency, and the model does not pretend to know that). **A real self-inflicted bug fixed here:** the first version returned the `impact` usage message as a *failure*, which made `run(...)` call `System.exit(1)` — killing the surefire JVM running the CLI's own tests, mid-build. Fixed twice over: usage is now success, and more importantly `System.exit` was moved out of the command logic entirely (`execute(...)` returns a boolean; `run(...)` translates it), so no command path can kill its own harness or a future embedding server. Regression test pins the contract.
 
 **`intelligence.model` (ADR-030) — the Engineering Model:** represents a repository *as a system* rather than a bag of independent modules. `EngineeringModel.dependentsOf(artifactId)` answers the concrete question that motivated it — "if module X changes, what else in this workspace could be affected?" — the direct prerequisite for Change Intelligence and Risk Intelligence. Deliberately not a generic graph, no persistence, no query engine. Validated against DLMP's real 8-module workspace: found all six real `service -> common` dependencies, correctly excluded external libraries and `common`'s own self-reference, cross-checked independently against DLMP's actual `pom.xml` files. Building it also surfaced and fixed a real latent bug — `getElementsByTagName` searches the whole document, so a `<dependencyManagement>` block (or a `<profile>`'s `<properties>`) could be silently misread as a module's own; all three affected lookups now resolve only `<project>`'s direct children.
 

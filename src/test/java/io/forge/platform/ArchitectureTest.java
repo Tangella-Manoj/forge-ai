@@ -74,6 +74,17 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.intelligence.model..");
 
   @ArchTest
+  static final ArchRule repositoryAndModelNeverDependOnChangeIntelligence =
+      noClasses()
+          .that()
+          .resideInAnyPackage(
+              "io.forge.platform.intelligence.repository..",
+              "io.forge.platform.intelligence.model..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.intelligence.change..");
+
+  @ArchTest
   static final ArchRule nothingDependsOnCli =
       noClasses()
           .that()
