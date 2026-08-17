@@ -2,7 +2,7 @@
 
 **Purpose:** Live, current-state companion to `CLAUDE.md` (which is the stable constitution). This file tracks what's actually built, right now, so it doesn't need to be reconstructed from conversation history.
 
-**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning (ADR-028), `reasoning` (ADR-029), `intelligence.model` (ADR-030) all implemented. New: `intelligence.change` (ADR-031) — Change Intelligence, exposed as `forge-ai impact <module> [path]`; also removed `System.exit` from the CLI's testable surface after it killed the build's own JVM. Forge now answers a real engineering question end to end: scan → model → impact → evidence-backed report. Validated live against DLMP (changing `common` correctly affects all 6 services). GitHub: `gh` authenticated as `Manoj-Ez` (company account); user confirmed `Tangella-Manoj` (same as DLMP) should own this repo — its SSH key already works here, so only repo *creation* is blocked, not the push. 211/211 tests passing.
+**Last updated:** Sprint 1 (Platform Core) complete. `ai.provider` (ADR-024), `intelligence.repository` (ADR-025), `intelligence.architecture` (ADR-026), `cli` (ADR-027), multi-module scanning (ADR-028), `reasoning` (ADR-029), `intelligence.model` (ADR-030), `intelligence.change` (ADR-031) all implemented. New: `intelligence.risk` (ADR-032) — Risk Intelligence with three transparent rules, evidence/reason/recommendation kept separate, no scoring framework, no ML. Validated on DLMP: exactly 2 findings, both hand-verified, zero false positives across the other 6 modules. Forge now runs the full chain: scan → engineering model → change impact → risk findings → evidence-backed report. GitHub: `gh` authenticated as `Manoj-Ez` (company account); user confirmed `Tangella-Manoj` (same as DLMP) should own this repo — its SSH key already works here, so only repo *creation* is blocked, not the push. 228/228 tests passing.
 
 ---
 
@@ -96,6 +96,16 @@ src/main/java/io/forge/platform/intelligence/
                                        Javadoc says so — HTTP/route relationships not claimed)
 
 src/main/java/io/forge/platform/intelligence/
+└── risk/
+    ├── RiskAnalyzer.java           (final: analyze(EngineeringModel) -> List<RiskFinding>;
+    │                                 3 transparent rules, no score, no ML — ADR-032)
+    ├── RiskFinding.java            (category, severity, subject, evidence, reason,
+    │                                 recommendation — evidence and advice never merged)
+    ├── RiskCategory.java           (CIRCULAR_PACKAGE_DEPENDENCY, CIRCULAR_MODULE_DEPENDENCY,
+    │                                 CHANGE_AMPLIFICATION — one value per implemented rule)
+    └── RiskSeverity.java           (HIGH = objective defect, MEDIUM = cost signal)
+
+src/main/java/io/forge/platform/intelligence/
 └── change/
     ├── ChangeImpactAnalyzer.java    (final: analyze(EngineeringModel, module) ->
     │                                  Result<ChangeImpact, PlatformError> — ADR-031; unknown
@@ -118,7 +128,9 @@ Run it (all verified working end-to-end, not assumed — including exit codes: 0
 - or during development: `./mvnw spring-boot:run -Dspring-boot.run.arguments=scan`
 - `[path]` can be a single Maven module or a multi-module project root — the CLI always uses `scanWorkspace` and reports every module found.
 
-211/211 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `repository`+`model`/`change`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 94% branch coverage; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+228/228 tests passing (includes `ArchitectureTest`, which has no production-code counterpart to list above but enforces §8's `core` dependency rules — now also covering `core`/`intelligence`, `ai`/`intelligence`, `repository`/`architecture`, `repository`+`model`/`change`, `cli`, and `reasoning` boundaries, plus cycle-freedom within `intelligence.*`'s own subpackages). `mvn clean verify` and `./mvnw clean verify` both green (Java 25, spotless clean, JaCoCo: 97% instruction / 94% branch coverage; the remaining gaps are documented, deliberate omissions with no real product risk). `.github/dependabot.yml` added — Maven + GitHub Actions dependency scanning, activates once the repo is pushed to GitHub, no API key required.
+
+**`intelligence.risk` (ADR-032) — Risk Intelligence:** three transparent rules over existing evidence — circular package dependencies (HIGH), circular module dependencies (HIGH), and change amplification (MEDIUM). No weighted score, no composite index, no ML: a number like "risk 7.3" implies precision this analysis doesn't have and can't explain, whereas "these two packages import each other" is checkable by hand in thirty seconds. **Change amplification is deliberately capped at MEDIUM** — DLMP's `common` is depended on by all 6 services, which is the *point* of extracting a shared module, not a defect; flagging correct architecture as HIGH RISK is how analysis tools teach engineers to ignore them. A test pins both the cap and the wording. Validated on DLMP: exactly 2 findings, both hand-verified against the source (the `loan-service` cycle is real — `LoanCommandService` → `saga`, `LoanDisbursementTransaction` → `command`), and **zero false positives** on the other 6 modules.
 
 **`intelligence.change` (ADR-031) — Change Intelligence:** answers "if I change module X, what else is affected?", splitting direct from transitive dependents (different engineering weight; summing them would discard the distinction). Exposed as `forge-ai impact <module> [path]`. Verified live against DLMP: changing `common` correctly reports all 6 services as direct dependents, and the report always states its own limit (build-time Maven coupling only — DLMP's `api-gateway` routes to services over HTTP with no Maven dependency, and the model does not pretend to know that). **A real self-inflicted bug fixed here:** the first version returned the `impact` usage message as a *failure*, which made `run(...)` call `System.exit(1)` — killing the surefire JVM running the CLI's own tests, mid-build. Fixed twice over: usage is now success, and more importantly `System.exit` was moved out of the command logic entirely (`execute(...)` returns a boolean; `run(...)` translates it), so no command path can kill its own harness or a future embedding server. Regression test pins the contract.
 

@@ -9,6 +9,8 @@ import io.forge.platform.intelligence.model.EngineeringModelBuilder;
 import io.forge.platform.intelligence.model.ModuleDependency;
 import io.forge.platform.intelligence.repository.RepositoryScanner;
 import io.forge.platform.intelligence.repository.RepositorySnapshot;
+import io.forge.platform.intelligence.risk.RiskAnalyzer;
+import io.forge.platform.intelligence.risk.RiskFinding;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -71,7 +73,40 @@ final class RepositoryIntelligenceReport {
       appendEngineeringModel(report, snapshots);
     }
 
+    report.append('\n');
+    appendRiskFindings(report, EngineeringModelBuilder.build(snapshots));
+
     return report.toString();
+  }
+
+  private static void appendRiskFindings(StringBuilder report, EngineeringModel model) {
+    List<RiskFinding> findings = RiskAnalyzer.analyze(model);
+
+    report.append("--- Risk findings ---\n");
+    if (findings.isEmpty()) {
+      report.append("None detected by the current rules.\n");
+      return;
+    }
+
+    for (RiskFinding finding : findings) {
+      report
+          .append('\n')
+          .append('[')
+          .append(finding.severity())
+          .append("] ")
+          .append(finding.category())
+          .append(" — ")
+          .append(finding.subject())
+          .append('\n');
+      // Evidence, reason, and recommendation are labelled separately and never merged: a reader
+      // must be able to tell a measured fact from advice they are free to reject.
+      report.append("  Evidence:\n");
+      for (String evidence : finding.evidence()) {
+        report.append("    - ").append(evidence).append('\n');
+      }
+      report.append("  Why it matters: ").append(finding.reason()).append('\n');
+      report.append("  Recommendation: ").append(finding.recommendation()).append('\n');
+    }
   }
 
   private static void appendEngineeringModel(

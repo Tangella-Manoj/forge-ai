@@ -763,6 +763,45 @@ The first version of the `impact` command returned its usage message as a *faile
 
 Forge can now answer a real engineering question end to end: *scan a repository → build its engineering model → determine what a change affects → report it with its own limits stated*. Verified live against DLMP: changing `common` correctly affects all 6 services, directly, with the build-time-coupling caveat printed rather than implied.
 
+## ADR-032
+
+### Risk Intelligence: Transparent Rules, and Why Change Amplification Is Capped at MEDIUM
+
+#### Decision
+
+Add `io.forge.platform.intelligence.risk` — `RiskAnalyzer.analyze(EngineeringModel) -> List<RiskFinding>`, with three transparent rules and exactly two severities. Every `RiskFinding` carries `evidence` (measured facts), `reason` (why they matter), and `recommendation` (advice) as **separate** fields, never merged.
+
+Rules:
+1. **Circular package dependency** → HIGH. An objective defect regardless of intent.
+2. **Circular module dependency** → HIGH. Build-breaking.
+3. **Change amplification** (≥3 affected modules) → **MEDIUM, never HIGH**.
+
+#### Why change amplification is capped at MEDIUM
+
+This is the central judgment of this ADR. DLMP's `common` module is depended on by all six services — the highest fan-in in the workspace. Reporting that as HIGH RISK would be a false positive: a shared library having many dependents is *the entire point of extracting it*. Flagging correct, intentional architecture as broken is how static analysis tools train engineers to ignore them.
+
+So the finding is framed as **cost, not defect**: "changing this affects 6 of 8 modules — plan for it", with the reason explicitly stating this is expected for a shared module. A test (`reportsChangeAmplificationAsMediumNeverHigh`) pins both the severity cap and the wording, so a future change cannot silently turn this back into an alarm.
+
+The ≥3 threshold exists for the same reason: at 1–2 dependents, nearly every shared module in any workspace would qualify, which is the definition of noise.
+
+#### Alternatives considered
+
+- A weighted composite risk score (e.g. "risk: 7.3/10"): rejected. It implies a precision this analysis does not have, cannot be explained to the engineer receiving it, and cannot be checked by hand. "These two packages import each other" is verifiable in thirty seconds; "7.3" is not.
+- ML-based risk scoring: rejected outright — explicitly excluded by the standing instructions, and it would destroy explainability, which is the product's differentiator.
+- More rules (large modules, low cohesion, high package counts): rejected for now. DLMP's `loan-service` has 18 packages vs. others at 4–10, but "larger than its siblings" is not evidence of a defect, and flagging it would generate exactly the false positives this design avoids. Rules are added when there is objective evidence they identify something wrong — not to lengthen the list.
+- Reusing `CycleDetector` for module cycles by generalizing it over a shared edge type: rejected as unnecessary indirection. `EngineeringModel.dependentsOf(x).contains(x)` already answers "is x in a cycle?" using an already-verified traversal.
+
+#### Validation
+
+Run against DLMP's real 8-module workspace: exactly **two** findings, both independently verified by hand.
+- HIGH cycle in `loan-service` — confirmed by reading the source: `LoanCommandService` imports `saga.LoanDisbursementSaga`, and `LoanDisbursementTransaction` imports `command.EmiScheduleService`. A genuine mutual dependency.
+- MEDIUM amplification on `common` — confirmed against all seven module poms.
+- **Zero findings on the other six modules** — the false-positive rate on a real production codebase is 0.
+
+#### Long-term impact
+
+Forge now produces evidence-backed engineering findings a senior engineer can check and either act on or dismiss with reasons. The evidence/reason/recommendation separation is now the house pattern for anything Forge asserts, matching `ArchitectureAssessment`'s fact/inference split.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
