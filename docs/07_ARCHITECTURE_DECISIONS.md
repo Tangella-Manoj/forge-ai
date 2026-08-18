@@ -849,6 +849,45 @@ Boot 4.1.0 changed enough test infrastructure that Boot 3 knowledge actively mis
 
 Forge's intelligence pipeline is now reachable over a network boundary, which is the prerequisite for any future dashboard, IDE integration, or third-party client. The DTO/domain separation and the Problem Detail error convention are now the house pattern for the API surface, matching the evidence/reason/recommendation and fact/inference separations already established internally. `WorkspacePathResolver` closes the last known unaddressed security gap from repository scanning becoming network-reachable.
 
+## ADR-034
+
+### Deployment: A Container That Ships Its Own Workspace
+
+#### Decision
+
+Deploy as a single Docker container — multi-stage build (JDK 25 build stage, JRE 25 Alpine runtime), non-root user, container `HEALTHCHECK` against `/actuator/health` — described by a `render.yaml` blueprint targeting Render's free tier. The image **bundles this project's own sources** (`pom.xml` + `src/main`, ~220KB) at `/workspace/forge-ai`, with `FORGE_WORKSPACE_ROOT` pointed at them.
+
+#### Why the image ships a workspace
+
+This is the non-obvious part, and the reason this ADR exists. Forge analyzes repositories on a filesystem. A deployed container has no repository in it, and Render's free tier has no persistent disk to mount one from. Deployed as-is, the service would have started, reported healthy, passed every probe — and returned `400 repository.scan.pom_missing` to every analysis request. Healthy and useless is a worse failure than crashed, because nothing alerts on it.
+
+Bundling the project's own sources makes the deployed service analyze *itself*. That is not a demo fixture or fabricated sample data — it is the same dogfooding `RepositoryScannerTest` already does, and the output is a genuine analysis of real code. A CI step asserts the bundled workspace stays analyzable, so a future change cannot quietly return the deployment to healthy-but-useless.
+
+The honest limitation: Forge deployed this way analyzes one repository, itself. Analyzing arbitrary repositories over the network needs a way to *get* them (clone a Git URL, or mount a volume), which is a real capability with real security consequences — untrusted clone targets, disk consumption, execution of nothing but still-parsed hostile input. That is deliberately not built here. Mounting a volume already works locally and is documented; the network-fetch capability waits until it is actually needed.
+
+#### Why Render, and why the free tier's shape matters
+
+The host was the user's choice. What it constrains is worth recording: no persistent disk (hence the bundled workspace above), a single instance, and — the operationally surprising one — **the instance spins down after 15 minutes without traffic and takes about a minute to answer the next request**. Anyone treating the deployed URL as always-warm will misread that first slow response as a bug. It is the free tier working as designed.
+
+`healthCheckPath` reuses `/actuator/health` rather than introducing a deployment-specific endpoint, so the container's own `HEALTHCHECK`, the CI job, and the platform's restart trigger all assert the same contract. Three health definitions that can disagree is a way to be told the service is fine while it isn't.
+
+No database, cache, or worker is declared in the blueprint. The application uses none; declaring them to look production-ready would be infrastructure the code cannot exercise.
+
+#### JVM sizing
+
+`-XX:MaxRAMPercentage=75.0` rather than a fixed `-Xmx`. The JVM's container-aware default caps the heap at 25% of the cgroup limit, which on a 512MB-class instance leaves most of the machine unused. A percentage keeps the setting correct if the instance size ever changes, where a hardcoded `-Xmx` silently becomes wrong. Verified under `--memory=512m`: the service starts, serves a real self-analysis, and settles at 146MB.
+
+#### Alternatives considered
+
+- **Deploy the jar directly (no container)**: rejected. The runtime already needs a pinned JDK 25, and a container makes "works on my machine" verifiable in CI rather than asserted.
+- **Empty workspace, document that a volume is required**: rejected. It makes the default deployment non-functional, and the failure mode (healthy, 400 on everything) is silent.
+- **Bundle a richer sample repository** — e.g. a multi-module project with real findings, which would demo better than a single cycle-free module: rejected. The obvious candidate is a separate project belonging to the user; copying someone's codebase into a public image is not a decision to make casually, and synthesizing a fake "interesting" repository would be fabricated evidence in a product whose entire premise is evidence over assertion. Forge analyzing itself and honestly reporting zero risk findings is the correct output.
+- **Registry push from CI**: rejected for now. No registry or credentials have been chosen; Render builds from the repository directly, so nothing currently needs one.
+
+#### Status
+
+Configuration complete and verified locally under the free tier's memory limit. **Not yet live** — Render builds from a connected Git repository, and this repository has not been published yet (see `PROJECT_STATE.md` blockers). Nothing further needs to be written on the Forge side.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.

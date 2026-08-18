@@ -49,6 +49,55 @@ Key documents:
 3. Run the development environment check:
    `./scripts/verify-dev-environment.sh`
 
+## Running It
+
+Build first: `./mvnw clean package`
+
+**As a CLI** — analyze any local Maven project (single module or multi-module root):
+
+```
+java -jar target/forge-ai-0.1.0-SNAPSHOT.jar scan [path]
+java -jar target/forge-ai-0.1.0-SNAPSHOT.jar impact <module> [path]
+```
+
+`scan` reports structure, packages, dependencies, circular dependencies, and risk findings.
+`impact` reports what else a change to `<module>` would affect.
+
+**As an API** — run with no arguments to start the web server instead:
+
+```
+java -jar target/forge-ai-0.1.0-SNAPSHOT.jar
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/analysis?repository=<path>` | Modules, module dependencies, and risk findings |
+| `GET /api/v1/impact?module=<artifactId>&repository=<path>` | What a change to that module affects |
+| `GET /actuator/health` | Liveness/readiness, for deployment probes |
+
+`repository` is optional and always **relative to `FORGE_WORKSPACE_ROOT`** (defaults to the working
+directory). Absolute paths and any path escaping that root are rejected — the API will only ever
+read inside its configured workspace. Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
+Problem Details carrying a stable machine-readable `code`.
+
+**In Docker:**
+
+```
+docker build -t forge-ai .
+docker run -p 8080:8080 forge-ai
+```
+
+The image ships this project's own sources as its default workspace, so a fresh container has
+something real to analyze — `curl localhost:8080/api/v1/analysis` returns Forge analyzing itself.
+Mount another repository to analyze that instead:
+
+```
+docker run -p 8080:8080 -e FORGE_WORKSPACE_ROOT=/workspace \
+  -v /path/to/your/project:/workspace/your-project:ro forge-ai
+```
+
+`render.yaml` deploys the same image to [Render](https://render.com) as a web service.
+
 ## Development Lifecycle
 
 Before changing code, read:
