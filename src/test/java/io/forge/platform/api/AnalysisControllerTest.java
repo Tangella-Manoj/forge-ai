@@ -117,16 +117,16 @@ class AnalysisControllerTest {
 
     assertTrue(response.status().is2xxSuccessful());
     JsonNode body = response.body();
-    assertEquals(".", body.get("workspace").asText());
+    assertEquals(".", body.get("workspace").asString());
     assertEquals(4, body.get("modules").size());
     assertEquals(2, body.get("moduleDependencies").size());
 
     JsonNode topFinding = body.get("riskFindings").get(0);
-    assertEquals("HIGH", topFinding.get("severity").asText());
-    assertEquals("CIRCULAR_PACKAGE_DEPENDENCY", topFinding.get("category").asText());
-    assertEquals("loan-service", topFinding.get("subject").asText());
+    assertEquals("HIGH", topFinding.get("severity").asString());
+    assertEquals("CIRCULAR_PACKAGE_DEPENDENCY", topFinding.get("category").asString());
+    assertEquals("loan-service", topFinding.get("subject").asString());
     assertTrue(topFinding.get("evidence").isArray());
-    assertFalse(topFinding.get("recommendation").asText().isBlank());
+    assertFalse(topFinding.get("recommendation").asString().isBlank());
   }
 
   @Test
@@ -134,9 +134,9 @@ class AnalysisControllerTest {
     Response response = get("/api/v1/analysis?repository=common");
 
     assertTrue(response.status().is2xxSuccessful());
-    assertEquals("common", response.body().get("workspace").asText());
+    assertEquals("common", response.body().get("workspace").asString());
     assertEquals(1, response.body().get("modules").size());
-    assertEquals("common", response.body().get("modules").get(0).get("artifactId").asText());
+    assertEquals("common", response.body().get("modules").get(0).get("artifactId").asString());
   }
 
   @Test
@@ -144,8 +144,8 @@ class AnalysisControllerTest {
     Response response = get("/api/v1/analysis?repository=../../etc");
 
     assertEquals(400, response.status().value());
-    assertEquals("workspace.path_outside_root", response.body().get("code").asText());
-    assertEquals("Analysis failed", response.body().get("title").asText());
+    assertEquals("workspace.path_outside_root", response.body().get("code").asString());
+    assertEquals("Analysis failed", response.body().get("title").asString());
   }
 
   @Test
@@ -153,7 +153,7 @@ class AnalysisControllerTest {
     Response response = get("/api/v1/analysis?repository=/etc");
 
     assertEquals(400, response.status().value());
-    assertEquals("workspace.path_must_be_relative", response.body().get("code").asText());
+    assertEquals("workspace.path_must_be_relative", response.body().get("code").asString());
   }
 
   @Test
@@ -161,7 +161,7 @@ class AnalysisControllerTest {
     Response response = get("/api/v1/analysis?repository=not-a-module");
 
     assertEquals(400, response.status().value());
-    assertEquals("repository.scan.pom_missing", response.body().get("code").asText());
+    assertEquals("repository.scan.pom_missing", response.body().get("code").asString());
   }
 
   @Test
@@ -170,11 +170,11 @@ class AnalysisControllerTest {
 
     assertTrue(response.status().is2xxSuccessful());
     JsonNode body = response.body();
-    assertEquals("common", body.get("changedModule").asText());
+    assertEquals("common", body.get("changedModule").asString());
     assertEquals(2, body.get("affectedModuleCount").asInt());
-    assertEquals("loan-service", body.get("directDependents").get(0).asText());
-    assertEquals("gateway", body.get("transitiveDependents").get(0).asText());
-    assertFalse(body.get("scope").asText().isBlank());
+    assertEquals("loan-service", body.get("directDependents").get(0).asString());
+    assertEquals("gateway", body.get("transitiveDependents").get(0).asString());
+    assertFalse(body.get("scope").asString().isBlank());
   }
 
   @Test
@@ -182,7 +182,7 @@ class AnalysisControllerTest {
     Response response = get("/api/v1/impact?module=no-such-module");
 
     assertEquals(404, response.status().value());
-    assertEquals("change.module_not_in_workspace", response.body().get("code").asText());
+    assertEquals("change.module_not_in_workspace", response.body().get("code").asString());
   }
 
   @Test
@@ -195,7 +195,7 @@ class AnalysisControllerTest {
     Response response = get("/actuator/health");
 
     assertTrue(response.status().is2xxSuccessful());
-    assertEquals("UP", response.body().get("status").asText());
+    assertEquals("UP", response.body().get("status").asString());
   }
 
   @Test
