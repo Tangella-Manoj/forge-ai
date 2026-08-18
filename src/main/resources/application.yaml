@@ -22,6 +22,10 @@ management:
       show-details: never
 
 forge:
+  # Filtered from the Maven project version at build time, so the running service reports the build
+  # it actually is rather than a number someone has to remember to bump by hand. Quoted because "@"
+  # is a reserved character in YAML.
+  version: "@project.version@"
   workspace:
     # The only directory tree the API may scan. Every requested repository path is resolved beneath
     # it; absolute paths and traversal outside it are rejected (WorkspacePathResolver). Defaults to
