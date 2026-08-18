@@ -51,6 +51,11 @@ jobs:
             echo "Expected /actuator/env to 404, got $status"
             exit 1
           fi
+      - name: Verify the image ships a workspace it can actually analyze
+        # The deployed container has no repository unless one is baked in; if this regresses,
+        # the service still reports healthy while every analysis endpoint returns 400.
+        run: |
+          curl -sf http://localhost:8080/api/v1/analysis | grep -q '"artifactId":"forge-ai"'
       - name: Container logs
         if: always()
         run: docker logs forge-ai-ci || true

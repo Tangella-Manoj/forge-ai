@@ -1,0 +1,23 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys the existing Dockerfile as a single web service. No database, cache, or worker is
+# declared because the application has none: adding them here to "look production-ready" would be
+# infrastructure the code does not use.
+#
+# Render terminates TLS and issues the certificate for the service's *.onrender.com hostname, so
+# HTTPS needs no configuration here. A custom domain is added through the Render dashboard once
+# one is chosen.
+services:
+  - type: web
+    name: forge-ai
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    # Render restarts the instance if this stops returning 2xx. It is the same endpoint the
+    # container's own HEALTHCHECK and the CI job use — one health contract, not three.
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    # PORT is injected by Render and read by application.yaml (${PORT:8080}).
+    # FORGE_WORKSPACE_ROOT is set in the Dockerfile so the image behaves identically
+    # here and locally; override it here only if a different workspace is ever mounted.
