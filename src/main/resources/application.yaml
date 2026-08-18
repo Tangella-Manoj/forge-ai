@@ -2,10 +2,28 @@ spring:
   application:
     name: forge-ai
 
-# spring-boot-starter-actuator is on the classpath (pom.xml) as forward-provisioning for health
-# checks once a web layer exists — this project's own deployment requirements name health checks
-# explicitly. Its web-exposure configuration (management.endpoints.web.exposure.include, etc.) is
-# deliberately NOT set here: with no spring-boot-starter-web, no embedded server starts (verified:
-# `java -jar ...` with no "scan" arg starts and exits with no port listening), so that config would
-# have zero effect and risk misleading a reader into thinking health checks are live. Add it back
-# alongside the web starter, not before.
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+# Only health is exposed. The full actuator surface (env, beans, configprops, heapdump, loggers...)
+# discloses configuration and internals and must not be public — this project's security rules name
+# "exposed management endpoints" explicitly. show-details is "never" so an unauthenticated caller
+# gets liveness/readiness without a component-by-component map of the system's dependencies.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+forge:
+  workspace:
+    # The only directory tree the API may scan. Every requested repository path is resolved beneath
+    # it; absolute paths and traversal outside it are rejected (WorkspacePathResolver). Defaults to
+    # the process working directory; override with FORGE_WORKSPACE_ROOT in a deployed environment.
+    root: ${FORGE_WORKSPACE_ROOT:}

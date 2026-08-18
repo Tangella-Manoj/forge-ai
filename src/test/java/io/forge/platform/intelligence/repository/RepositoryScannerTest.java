@@ -70,6 +70,7 @@ class RepositoryScannerTest {
     assertEquals(
         Set.of(
             "spring-boot-starter",
+            "spring-boot-starter-web",
             "spring-boot-starter-actuator",
             "spring-boot-starter-validation",
             "spring-boot-starter-test",

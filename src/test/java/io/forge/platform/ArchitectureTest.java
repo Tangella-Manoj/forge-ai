@@ -106,6 +106,24 @@ class ArchitectureTest {
           .resideInAPackage("io.forge.platform.cli..");
 
   @ArchTest
+  static final ArchRule nothingDependsOnApi =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("io.forge.platform.api..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.api..");
+
+  @ArchTest
+  static final ArchRule productSurfacesDoNotDependOnEachOther =
+      noClasses()
+          .that()
+          .resideInAPackage("io.forge.platform.api..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("io.forge.platform.cli..");
+
+  @ArchTest
   static final ArchRule coreAiIntelligenceNeverDependOnReasoning =
       noClasses()
           .that()

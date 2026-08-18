@@ -802,6 +802,53 @@ Run against DLMP's real 8-module workspace: exactly **two** findings, both indep
 
 Forge now produces evidence-backed engineering findings a senior engineer can check and either act on or dismiss with reasons. The evidence/reason/recommendation separation is now the house pattern for anything Forge asserts, matching `ArchitectureAssessment`'s fact/inference split.
 
+## ADR-033
+
+### First Product Surface: A Minimal REST API Over the Existing Intelligence Pipeline
+
+#### Decision
+
+Add `io.forge.platform.api` — two read-only endpoints, `GET /api/v1/analysis` and `GET /api/v1/impact`, exposing exactly what the CLI already exposes (repository scan, engineering model, change impact, risk findings) over HTTP. No new capability is introduced at this layer; the controller is a thin adapter that resolves a path, calls the same `intelligence.*` code the CLI calls, and maps the result onto API-owned DTOs (`AnalysisResponse`, `ImpactResponse`) that are deliberately distinct from the internal domain records, so an internal refactor never becomes a silent breaking API change.
+
+This is the first user-facing product surface. Per the standing instruction not to build a dashboard before the backend workflow is usable, no UI was built — only the minimum API needed to make repository intelligence reachable over the network at all.
+
+#### Why a new trust boundary was required first
+
+The CLI reads whatever path an operator types at a trusted local terminal. An HTTP endpoint reads whatever path a remote, untrusted caller supplies in a query string — the same class of arbitrary-file-read risk flagged (but not yet reachable, and so not yet fixed) in an earlier session's `PROJECT_STATE.md` note. `WorkspacePathResolver` closes it: `forge.workspace.root` (typed via `WorkspaceProperties`, a `@ConfigurationProperties` record) is the only directory tree the API may ever read from. Every requested `repository` path is rejected outright if absolute, otherwise resolved beneath the root and *normalized* before a `startsWith(root)` containment check — so both plain traversal (`../../etc`) and traversal hidden behind an innocent-looking prefix (`service-a/../../../etc/passwd`) are caught by the same check, not two different ones that could drift out of sync. This is tested directly (`WorkspacePathResolverTest`) and end-to-end through real HTTP calls (`AnalysisControllerTest`), including a case that stays inside the root and must be *allowed* (`a/../b`), so the boundary is proven to reject escapes without also rejecting legitimate relative paths.
+
+#### Why errors are RFC 9457 Problem Details, not ad-hoc JSON
+
+`06_ENGINEERING_STANDARDS.md` requires this directly, and it was previously listed as "not yet applicable — no REST layer exists yet." It now applies. Every `PlatformError` already carries a stable, machine-readable `code` and a human `message`; the controller maps that straight onto `ProblemDetail.forStatusAndDetail(status, message)` with `code` attached as an extension property, so a client can branch on `workspace.path_outside_root` or `change.module_not_in_workspace` without parsing prose. No new error vocabulary was invented — this is the existing `PlatformError` model, serialized.
+
+#### Why the reasoning/AI endpoint is deliberately absent
+
+Priority 5 (AI Runtime) still has no real provider credentials — `ai.provider` only has `fixed`/`failing` test doubles. Exposing a `/reasoning` endpoint today would mean serving canned test-double output to a real caller as if it were genuine AI reasoning, which the standing rule ("do not fabricate AI output") explicitly forbids. This is an intentional exclusion, not an oversight, and is the correct point to stop for this milestone — the endpoint is added when a real provider is wired in, not before.
+
+#### Actuator exposure
+
+`management.endpoints.web.exposure.include: health` only, `show-details: never`. `env`, `beans`, `configprops`, and the rest of the actuator surface disclose configuration and internals and must not be public (§16, "exposed management endpoints" named explicitly in this project's security rules). A regression test (`sensitiveActuatorEndpointsAreNotExposed`) pins this as a security boundary, not just a default.
+
+#### Spring Boot 4 findings worth recording
+
+Boot 4.1.0 changed enough test infrastructure that Boot 3 knowledge actively misled here, discovered by inspecting the actual jars rather than guessing:
+- `@AutoConfigureMockMvc` (`org.springframework.boot.test.autoconfigure.web.servlet`) does not exist in Boot 4.1.0's test jars. Tests instead boot a real embedded server (`@SpringBootTest(webEnvironment = RANDOM_PORT)`) and issue real HTTP calls via `RestClient` — arguably a stronger test anyway, since it also exercises status codes, content negotiation, and serialization as a real caller would see them.
+- `@LocalServerPort` moved to `org.springframework.boot.test.web.server.LocalServerPort`.
+- Boot 4 uses **Jackson 3** (`tools.jackson.databind`), not the classic `com.fasterxml.jackson.databind`.
+
+#### Alternatives considered
+
+- Serializing internal domain records (`RepositorySnapshot`, `ChangeImpact`) directly as the API response: rejected — couples a long-term wire contract to internals that are expected to keep evolving; the whole point of a DTO layer here.
+- POST with a JSON body instead of a `repository` query parameter: rejected for now — these are read-only, side-effect-free queries; GET is the correct verb, and a query parameter is simpler for a first surface with two endpoints. Revisit if request shape grows complex enough to need a body.
+- Building dashboard/UI alongside the API: rejected per explicit instruction — backend workflow must be usable first.
+
+#### Validation
+
+248/248 tests pass (`./mvnw clean verify`), including the full existing suite plus `WorkspacePathResolverTest` and the ten end-to-end `AnalysisControllerTest` cases. Beyond the test suite, the packaged jar was actually started (`java -jar target/forge-ai-*.jar`) and queried live with real HTTP requests against the real DLMP repository: `/api/v1/analysis?repository=distributed-loan-management-platform` returned the identical 8 modules, 6 module dependencies, and exactly the same 2 risk findings (HIGH circular package dependency in `loan-service`, MEDIUM change amplification on `common`) independently verified by hand in ADR-032 — confirming the API layer introduces no discrepancy versus the CLI path. Path traversal and absolute-path requests both returned 400 with the expected Problem Detail codes; `/actuator/env`, `/actuator/beans`, `/actuator/configprops` all returned 404 against the live server, not just in tests.
+
+#### Long-term impact
+
+Forge's intelligence pipeline is now reachable over a network boundary, which is the prerequisite for any future dashboard, IDE integration, or third-party client. The DTO/domain separation and the Problem Detail error convention are now the house pattern for the API surface, matching the evidence/reason/recommendation and fact/inference separations already established internally. `WorkspacePathResolver` closes the last known unaddressed security gap from repository scanning becoming network-reachable.
+
 ## Why I changed the roadmap
 
 After reflecting on everything we've designed, I think many portfolio projects fail because they optimize for features.
